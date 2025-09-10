@@ -1,0 +1,77 @@
+:root{
+    --bg:#ffffff;
+    --text:#0f172a;
+    --muted:#475569;
+    --brand:#2563eb;
+    --brand-2:#06b6d4;
+    --pill:#e6f2ff;
+    --shadow:0 10px 30px rgba(2,6,23,.08);
+  }
+  
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:Inter,system-ui,Arial,sans-serif;color:var(--text);background:var(--bg)}
+  a{text-decoration:none;color:inherit}
+  
+  /* Container */
+  .container{max-width:1180px;margin:0 auto;padding:0 20px}
+  
+  /* NAV */
+  .nav{position:sticky;top:0;background:rgba(255,255,255,.8);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid #eef2f7}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .brand{display:flex;align-items:center;gap:8px}
+  .logo{width:34px;height:34px}
+  .brand-text{font-weight:800;letter-spacing:.2px}
+  .brand-dot{color:var(--brand)}
+  
+  .menu{display:flex;gap:18px;align-items:center}
+  .menu a{color:#334155}
+  .menu a.active{color:var(--brand);font-weight:600}
+  
+  /* Dropdown */
+  .dropdown{position:relative}
+  .dropbtn{background:none;border:none;color:#334155;cursor:pointer;font:inherit}
+  .dropdown-content{display:none;position:absolute;top:120%;left:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px;min-width:200px;box-shadow:var(--shadow);padding:8px}
+  .dropdown-content a{display:block;padding:8px 10px;border-radius:8px}
+  .dropdown-content a:hover{background:#f8fafc}
+  .dropdown:hover .dropdown-content{display:block}
+  
+  /* Buttons */
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid transparent;line-height:1;font-weight:600}
+  .btn-primary{background:linear-gradient(90deg,var(--brand),#1e3a8a);color:#fff}
+  .btn-outline{border-color:#cbd5e1;color:#0f172a}
+  .btn-outline:hover{background:#f8fafc}
+  .btn-xl{padding:16px 22px;font-size:18px}
+  .btn-grad{background:linear-gradient(90deg,#22d3ee,#3b82f6);color:#fff;box-shadow:0 8px 25px rgba(59,130,246,.25)}
+  
+  /* HERO */
+  .hero{background:linear-gradient(180deg,#f8fdff 0%, #ffffff 60%);padding:72px 0 36px}
+  .pill{display:inline-block;background:#eaf6ff;color:#1e40af;border-radius:999px;padding:6px 12px;font-weight:600;font-size:14px}
+  .hero-inner{text-align:center}
+  .hero-title{font-size:52px;line-height:1.05;margin:16px 0 12px}
+  .grad{background:linear-gradient(90deg,#22d3ee,#3b82f6);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero-sub{color:var(--muted);max-width:720px;margin:0 auto 24px}
+  .cta-row{display:flex;gap:12px;justify-content:center;margin:10px 0 20px}
+  
+  /* Trust logos */
+  .trust-lead{color:#0f172a;font-weight:600;margin:28px 0 10px}
+  .trust-logos{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;align-items:center;justify-items:center;opacity:.9}
+  .trust-logos img{max-height:40px;max-width:140px;filter:grayscale(100%);opacity:.85}
+  
+  /* Sections demo */
+  .section{padding:56px 0;border-top:1px solid #f1f5f9}
+  .section h2{margin:0 0 8px}
+  
+  /* Footer */
+  .footer{border-top:1px solid #f1f5f9;padding:28px 0;text-align:center;color:#64748b}
+  
+  /* WhatsApp FAB */
+  .wa-fab{position:fixed;right:18px;bottom:18px;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:#25D366;box-shadow:var(--shadow)}
+  .wa-fab img{width:28px;height:28px}
+  
+  @media (max-width:900px){
+    .hero-title{font-size:40px}
+    .menu{display:none}     /* simple: ocultamos menú en móvil; podrías añadir burger si quieres */
+    .actions{display:none}
+    .trust-logos{grid-template-columns:repeat(2,1fr)}
+  }
+  
