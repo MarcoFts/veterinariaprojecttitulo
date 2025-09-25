@@ -1,33 +1,18 @@
-# Entorno virtual
-.venv/
-venv/
-
-# Archivos compilados de Python
+# Entornos Python
+backend/.venv/
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-*.pdb
 
-# Base de datos local (SQLite)
-db.sqlite3
-
-# Archivos de usuario/media
-/media/
-
-# Configuración local/entornos
+# Archivos Django
+*.sqlite3
 .env
 
-# Archivos de log
-*.log
+# Node
+frontend/node_modules/
+frontend/dist/
 
-# Archivos de IDE/editores
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Archivos del sistema operativo
+# Sistema
 .DS_Store
 Thumbs.db
- 

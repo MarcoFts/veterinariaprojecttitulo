@@ -1,2 +1,0 @@
-# veterinariaproject
-proyecto de titulo
