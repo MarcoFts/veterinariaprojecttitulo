@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 export default function Hero() {
     return (
       <section className="relative overflow-hidden">
@@ -17,9 +18,13 @@ export default function Hero() {
             </p>
   
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href="#" className="px-5 py-3 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft">
-                Abrir cuenta GRATIS
-              </a>
+              <Link
+                to="/registro"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft"
+              >
+                ¡Empezar GRATIS!
+                <span aria-hidden>→</span>
+              </Link>
               <a href="#funciones" className="px-5 py-3 rounded-full border border-roseA/30 hover:border-roseA">
                 Ver funcionalidades
               </a>

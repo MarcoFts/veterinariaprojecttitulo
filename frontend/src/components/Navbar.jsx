@@ -1,7 +1,15 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom';
+import { getToken, logout } from '../auth'
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
+  const isLogged = !!getToken()
+  const handleLogout = () => {
+    logout()
+    navigate('/login')   // adonde quieras enviarlo
+  }
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur bg-white/70 border-b border-white/40">
@@ -19,12 +27,30 @@ export default function Navbar() {
           <li><a href="#novedades" className="hover:text-roseA">Novedades</a></li>
         </ul>
 
-        {/* CTA desktop */}
-        <div className="hidden md:flex items-center gap-3">
-          <a href="#" className="px-4 py-2 rounded-full border border-roseA/20 hover:border-roseA/40">Iniciar sesión</a>
-          <a href="#" className="px-4 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft">¡Empezar GRATIS!</a>
-        </div>
-
+        <ul className="flex items-center gap-4">
+        {!isLogged ? (
+          <>
+            <li><Link to="/login" className="hover:text-roseA">Iniciar sesión</Link></li>
+            <li>
+              <Link to="/registro"
+                    className="px-5 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft">
+                ¡Empezar GRATIS!
+              </Link>
+            </li>
+          </>
+        ) : (
+          <>
+            <li><Link to="/citas" className="hover:text-roseA">Mis citas</Link></li>
+            <li>
+              <button onClick={handleLogout}
+                      className="text-sm text-black/70 hover:text-roseA">
+                Cerrar sesión
+              </button>
+            </li>
+          </>
+        )}
+      </ul>
+      
         {/* Botón móvil */}
         <button
           onClick={() => setOpen(true)}
@@ -48,11 +74,14 @@ export default function Navbar() {
               aria-label="Cerrar menú"
             >Cerrar ✕</button>
 
-            <ul className="flex flex-col gap-4 text-base">
-              <li><a href="#funcionalidades" onClick={()=>setOpen(false)} className="hover:text-roseA">Funcionalidades</a></li>
-              <li><a href="#planes" onClick={()=>setOpen(false)} className="hover:text-roseA">Planes</a></li>
-              <li><a href="#novedades" onClick={()=>setOpen(false)} className="hover:text-roseA">Novedades</a></li>
+            <ul className="hidden md:flex items-center gap-6 text-sm">
+              <li><a href="/" className="hover:text-roseA">Inicio</a></li>
+              <li><a href="/servicios" className="hover:text-roseA">Servicios</a></li>
+              <li><a href="/equipo" className="hover:text-roseA">Equipo</a></li>
+              <li><a href="/citas" className="hover:text-roseA">Agenda tu cita</a></li>
+              <li><a href="/contacto" className="hover:text-roseA">Contacto</a></li>
             </ul>
+
 
             <div className="mt-6 flex flex-col gap-3">
               <a href="#" className="px-4 py-2 rounded-full border border-roseA/20 hover:border-roseA/40 text-center">Iniciar sesión</a>
