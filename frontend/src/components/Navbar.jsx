@@ -32,35 +32,47 @@ export default function Navbar() {
         </ul>
 
         {/* Autenticación */}
-        <ul className="flex items-center gap-4">
-          {!isLogged ? (
-            <>
-              <li>
-                <Link to="/login" className="hover:text-roseA">Iniciar sesión</Link>
-              </li>
-              <li>
-                <Link
-                  to="/registro"
-                  className="px-5 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft"
-                >
-                  Registro
-                </Link>
-              </li>
-            </>
-          ) : (
-            <>
-              <li><Link to="/panel" className="hover:text-roseA">Panel</Link></li>
-              <li>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-black/70 hover:text-roseA"
-                >
-                  Cerrar sesión
-                </button>
-              </li>
-            </>
-          )}
-        </ul>
+      <ul className="flex items-center gap-4">
+  {!isLogged ? (
+    <>
+      <li>
+        <Link
+          to="/login"
+          className="hover:text-roseA transform transition-transform duration-300 hover:scale-105"
+        >
+          Iniciar sesión
+        </Link>
+      </li>
+      <li>
+        <Link
+          to="/registro"
+          className="px-5 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft transform transition-transform duration-300 hover:scale-105 hover:shadow-lg hover:shadow-roseA/30"
+        >
+          Registro
+        </Link>
+      </li>
+    </>
+  ) : (
+    <>
+      <li>
+        <Link
+          to="/panel"
+          className="hover:text-roseA transform transition-transform duration-300 hover:scale-105"
+        >
+          Panel
+        </Link>
+      </li>
+      <li>
+        <button
+          onClick={handleLogout}
+          className="text-sm text-black/70 hover:text-roseA transform transition-transform duration-300 hover:scale-105"
+        >
+          Cerrar sesión
+        </button>
+      </li>
+    </>
+  )}
+</ul>
 
         {/* Botón móvil */}
         <button

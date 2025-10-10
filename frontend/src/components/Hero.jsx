@@ -18,22 +18,22 @@ export default function Hero() {
           </h1>
 
           <p className="mt-4 text-lg text-black/70">
-            VetCare digitaliza tus procesos clínicos, administrativos y comunicacionales. 
-            Gestiona citas, fichas electrónicas, inventario, reportes y recordatorios automáticos 
+            VetCare digitaliza tus procesos clínicos, administrativos y comunicacionales.
+            Gestiona citas, fichas electrónicas, inventario, reportes y recordatorios automáticos
             desde una plataforma segura y fácil de usar.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
               to="/registro"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft transform transition-transform duration-300 hover:scale-105"
             >
               Comenzar →
             </Link>
 
             <a
               href="#funcionalidades"
-              className="px-5 py-3 rounded-full border border-roseA/30 hover:border-roseA text-black"
+              className="px-5 py-3 rounded-full border border-roseA/30 hover:border-roseA text-black transform transition-transform duration-300 hover:scale-105"
             >
               Ver funcionalidades
             </a>
