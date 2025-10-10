@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'
 import { getToken, logout } from '../auth'
 
 export default function Navbar() {
@@ -8,7 +8,7 @@ export default function Navbar() {
   const isLogged = !!getToken()
   const handleLogout = () => {
     logout()
-    navigate('/login')   // adonde quieras enviarlo
+    navigate('/login')
   }
 
   return (
@@ -17,40 +17,51 @@ export default function Navbar() {
         {/* Logo */}
         <a href="#" className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-roseA to-roseB shadow-soft grid place-items-center text-white font-bold">V</div>
-          <span className="font-display text-xl font-extrabold">Vet<strong className="text-roseA">Care</strong></span>
+          <span className="font-display text-xl font-extrabold">
+            Vet<strong className="text-roseA">Care</strong>
+          </span>
         </a>
 
-        {/* Desktop menu */}
-        <ul className="hidden md:flex items-center gap-6 text-sm">
-          <li><a href="#funcionalidades" className="hover:text-roseA">Funcionalidades</a></li>
-          <li><a href="#planes" className="hover:text-roseA">Planes</a></li>
-          <li><a href="#novedades" className="hover:text-roseA">Novedades</a></li>
+        {/* Menú principal */}
+        <ul className="hidden md:flex items-center gap-6 text-sm font-medium">
+          <li><a href="#funciones" className="hover:text-roseA">Inicio</a></li>
+          <li><a href="#modulos" className="hover:text-roseA">Módulos</a></li>
+          <li><a href="#citas" className="hover:text-roseA">Citas</a></li>
+          <li><a href="#reportes" className="hover:text-roseA">Reportes</a></li>
+          <li><a href="#contacto" className="hover:text-roseA">Contacto</a></li>
         </ul>
 
+        {/* Autenticación */}
         <ul className="flex items-center gap-4">
-        {!isLogged ? (
-          <>
-            <li><Link to="/login" className="hover:text-roseA">Iniciar sesión</Link></li>
-            <li>
-              <Link to="/registro"
-                    className="px-5 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft">
-                ¡Empezar GRATIS!
-              </Link>
-            </li>
-          </>
-        ) : (
-          <>
-            <li><Link to="/citas" className="hover:text-roseA">Mis citas</Link></li>
-            <li>
-              <button onClick={handleLogout}
-                      className="text-sm text-black/70 hover:text-roseA">
-                Cerrar sesión
-              </button>
-            </li>
-          </>
-        )}
-      </ul>
-      
+          {!isLogged ? (
+            <>
+              <li>
+                <Link to="/login" className="hover:text-roseA">Iniciar sesión</Link>
+              </li>
+              <li>
+                <Link
+                  to="/registro"
+                  className="px-5 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft"
+                >
+                  Registro
+                </Link>
+              </li>
+            </>
+          ) : (
+            <>
+              <li><Link to="/panel" className="hover:text-roseA">Panel</Link></li>
+              <li>
+                <button
+                  onClick={handleLogout}
+                  className="text-sm text-black/70 hover:text-roseA"
+                >
+                  Cerrar sesión
+                </button>
+              </li>
+            </>
+          )}
+        </ul>
+
         {/* Botón móvil */}
         <button
           onClick={() => setOpen(true)}
@@ -72,20 +83,21 @@ export default function Navbar() {
               onClick={() => setOpen(false)}
               className="mb-6 px-3 py-1.5 rounded-full border"
               aria-label="Cerrar menú"
-            >Cerrar ✕</button>
+            >
+              Cerrar ✕
+            </button>
 
-            <ul className="hidden md:flex items-center gap-6 text-sm">
-              <li><a href="/" className="hover:text-roseA">Inicio</a></li>
-              <li><a href="/servicios" className="hover:text-roseA">Servicios</a></li>
-              <li><a href="/equipo" className="hover:text-roseA">Equipo</a></li>
-              <li><a href="/citas" className="hover:text-roseA">Agenda tu cita</a></li>
-              <li><a href="/contacto" className="hover:text-roseA">Contacto</a></li>
+            <ul className="flex flex-col gap-4 text-sm">
+              <li><a href="#funciones" className="hover:text-roseA">Inicio</a></li>
+              <li><a href="#modulos" className="hover:text-roseA">Módulos</a></li>
+              <li><a href="#citas" className="hover:text-roseA">Citas</a></li>
+              <li><a href="#reportes" className="hover:text-roseA">Reportes</a></li>
+              <li><a href="#contacto" className="hover:text-roseA">Contacto</a></li>
             </ul>
 
-
             <div className="mt-6 flex flex-col gap-3">
-              <a href="#" className="px-4 py-2 rounded-full border border-roseA/20 hover:border-roseA/40 text-center">Iniciar sesión</a>
-              <a href="#" className="px-4 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft text-center">¡Empezar GRATIS!</a>
+              <Link to="/login" className="px-4 py-2 rounded-full border border-roseA/20 hover:border-roseA/40 text-center">Iniciar sesión</Link>
+              <Link to="/registro" className="px-4 py-2 rounded-full bg-gradient-to-r from-roseA to-roseB text-white shadow-soft text-center">Registro</Link>
             </div>
           </div>
         </div>
