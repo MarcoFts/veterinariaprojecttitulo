@@ -8,14 +8,15 @@ export default {
         body: ['Inter', 'ui-sans-serif', 'system-ui'],
       },
       colors: {
-        roseA: '#ff3b7f',
-        roseB: '#ff7bbd',
-        roseC: '#ffd1e6',
-        ink:   '#1B1C1F',
-        sky:   '#5ad7ff',
+        // 🌿 Nueva paleta verde-azulada
+        roseA: '#00bfa6', // Verde azulado principal
+        roseB: '#3de0c4', // Tono medio (para degradados)
+        roseC: '#b8f5ec', // Fondo suave pastel
+        ink:   '#1B1C1F', // Texto principal oscuro
+        sky:   '#5ad7ff', // Puedes dejarlo o adaptarlo luego
       },
       boxShadow: {
-        soft: '0 10px 30px rgba(255,59,127,.25)',
+        soft: '0 10px 30px rgba(0,191,166,.25)', // sombreado adaptado al nuevo color
       },
     },
   },

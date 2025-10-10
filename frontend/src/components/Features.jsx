@@ -22,7 +22,7 @@ export default function Features() {
     <section id="funciones" className="py-16 md:py-24 bg-white">
       <div className="max-w-6xl mx-auto px-4">
         <h2 className="font-display text-3xl md:text-4xl font-extrabold text-center">
-          Todo lo que necesitas <span className="text-roseA">para tu clínica veterinaria</span>
+          Todo lo que necesitas para tu clínica veterinaria
         </h2>
         <p className="text-center text-black/70 mt-2">
           VetCare integra todas las herramientas que tu clínica necesita en una sola plataforma digital.

@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
-import WhatsAppFloat from './components/WhatsAppFloat'
 
 import Home from './pages/Home'
 import Servicios from './pages/Servicios'
@@ -10,8 +9,8 @@ import Citas from './pages/Citas'
 import Contacto from './pages/Contacto'
 import Registro from './pages/Registro'
 import Login from './pages/Login'
-import { getToken } from './auth'
 import Logout from './pages/Logout'
+import { getToken } from './auth'
 
 export default function App() {
   return (
@@ -22,24 +21,28 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/servicios" element={<Servicios />} />
           <Route path="/equipo" element={<Equipo />} />
-          <Route path="/citas" element={
-            <Protected><Citas /></Protected>
-              }/>
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route
+            path="/citas"
+            element={
+              <Protected>
+                <Citas />
+              </Protected>
+            }
+          />
           <Route path="/contacto" element={<Contacto />} />
           <Route path="/registro" element={<Registro />} />
           <Route path="/login" element={<Login />} />
           <Route path="/logout" element={<Logout />} />
+          {/* Redirección por defecto */}
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
         <Footer />
       </div>
-      <WhatsAppFloat phone="+56912345678" />
     </>
   )
 }
+
+// 🔒 Protección de rutas para usuarios logueados
 function Protected({ children }) {
   return getToken() ? children : <Navigate to="/login" replace />
 }
-
-const isAuth = !!localStorage.getItem('access');
-<Route path="/citas" element={isAuth ? <Citas/> : <Navigate to="/login" replace/>} />
