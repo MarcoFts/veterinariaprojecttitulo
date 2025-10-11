@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Cliente, Cita, Mascota
+from .models import Cliente, Cita, Mascota, Producto, MovimientoInventario
+
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
@@ -23,3 +24,23 @@ class ClienteAdmin(admin.ModelAdmin):
 class MascotaAdmin(admin.ModelAdmin):
     list_display = ("id", "nombre", "especie", "sexo", "cliente")
     search_fields = ("nombre", "cliente__user__first_name", "cliente__user__last_name", "cliente__user__email")
+
+
+@admin.register(Cita)
+class CitaAdmin(admin.ModelAdmin):
+    list_display = ("id", "cliente", "mascota", "veterinario", "box", "inicio", "fin", "estado")
+    list_filter = ("estado", "box", "veterinario")
+    search_fields = ("cliente__user__email", "mascota__nombre", "veterinario__email")
+
+
+@admin.register(Producto)
+class ProductoAdmin(admin.ModelAdmin):
+    list_display = ("id", "nombre", "codigo", "stock", "stock_minimo", "fecha_vencimiento")
+    search_fields = ("nombre", "codigo")
+
+
+@admin.register(MovimientoInventario)
+class MovimientoInventarioAdmin(admin.ModelAdmin):
+    list_display = ("id", "producto", "tipo", "cantidad", "fecha", "motivo")
+    list_filter = ("tipo", "fecha")
+    search_fields = ("producto__nombre", "producto__codigo", "motivo")

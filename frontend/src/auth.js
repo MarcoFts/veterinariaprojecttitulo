@@ -1,57 +1,54 @@
-// 🔐 Claves de almacenamiento local
+// frontend/src/auth.js
+
 export const TOKEN_KEY = "access";
 export const REFRESH_KEY = "refresh";
 
-// ✅ Guardar tokens en localStorage
+// guardar tokens
 export const setTokens = ({ access, refresh }) => {
-  localStorage.setItem(TOKEN_KEY, access);
+  if (access) localStorage.setItem(TOKEN_KEY, access);
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
 };
 
-// ✅ Obtener tokens
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
+// getters
+export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
 export const getRefresh = () => localStorage.getItem(REFRESH_KEY);
 
-// ✅ Eliminar tokens (cerrar sesión)
+// compat para código existente
+export const getToken = getAccessToken;
+
+// estado de autenticación
+export const isAuthenticated = () => Boolean(getAccessToken());
+
+// logout
 export const logout = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
 };
 
-// ✅ Realizar peticiones autenticadas al backend
+// fetch autenticado (si lo necesitas)
 export const authFetch = async (url, options = {}) => {
-  const token = getToken();
+  const t = getAccessToken();
   const headers = { ...(options.headers || {}), "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { ...options, headers });
-  return res;
+  if (t) headers.Authorization = `Bearer ${t}`;
+  return fetch(url, { ...options, headers });
 };
 
-// ✅ Obtener header de autenticación rápidamente
-export const getAuthHeader = () => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
-// ✅ Refrescar el token de acceso usando el refresh token
+// refrescar access con refresh (opcional)
 export const refreshAccess = async () => {
-  const refresh = localStorage.getItem(REFRESH_KEY);
+  const refresh = getRefresh();
   if (!refresh) return false;
 
   try {
-    const response = await fetch("http://127.0.0.1:8000/api/auth/refresh/", {
+    const res = await fetch("http://127.0.0.1:8000/api/auth/refresh/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh }),
     });
-
-    if (!response.ok) return false;
-
-    const data = await response.json();
-    localStorage.setItem(TOKEN_KEY, data.access);
-    return true;
-  } catch (error) {
-    console.error("Error refreshing access token:", error);
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data?.access) localStorage.setItem(TOKEN_KEY, data.access);
+    return Boolean(data?.access);
+  } catch {
     return false;
   }
 };

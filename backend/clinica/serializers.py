@@ -1,86 +1,175 @@
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from rest_framework import serializers
-from .models import Cliente, Cita
-from django.contrib.auth.models import User
-from rest_framework import serializers
-from .models import Cliente, Mascota
-from .models import Cita
+from .utils import user_display_name
+from .models import (
+    Cliente,
+    Mascota,
+    Cita,
+    Producto,
+    MovimientoInventario,
+)
 
-class CitaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Cita
-        fields = '__all__'
+User = get_user_model()
 
+# ---------- Cliente / Mascota ----------
 class MascotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Mascota
-        exclude = ('cliente',)
+        exclude = ("cliente",)
+
 
 class ClienteSerializer(serializers.ModelSerializer):
-    mascotas = MascotaSerializer(many=True, read_only=True)
+    nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = Cliente
-        fields = '__all__'
+        fields = [
+            "id", "user", "telefono", "direccion", "rut_dni",
+            "acepta_comunicaciones", "mascotas", "nombre",
+        ]
 
+    def get_nombre(self, obj):
+        u = getattr(obj, "user", None)
+        if not u: return f"Cliente {obj.pk}"
+        return user_display_name(u)
+
+
+# ---------- Registro ----------
 class RegisterSerializer(serializers.Serializer):
     # Usuario
-    full_name = serializers.CharField(max_length=150)
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
     email = serializers.EmailField()
-    password = serializers.CharField(write_only=True, min_length=8, style={"input_type": "password"})
-    password2 = serializers.CharField(write_only=True, min_length=8, style={"input_type": "password"})
-
+    password = serializers.CharField(write_only=True, min_length=8)
+    password2 = serializers.CharField(write_only=True, min_length=8)
     # Cliente
-    telefono = serializers.CharField(max_length=30, allow_blank=True, required=False)
-    direccion = serializers.CharField(max_length=255, allow_blank=True, required=False)
-    rut_dni = serializers.CharField(max_length=30, allow_blank=True, required=False)
-    acepta_comunicaciones = serializers.BooleanField(default=False)
+    telefono = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    direccion = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    rut_dni = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    acepta_comunicaciones = serializers.BooleanField(required=False, default=False)
+    # Mascota opcional
+    mascota_nombre = serializers.CharField(required=False, allow_blank=True)
+    mascota_especie = serializers.CharField(required=False, allow_blank=True)
+    mascota_raza = serializers.CharField(required=False, allow_blank=True)
 
-    # Mascota
-    nombre_mascota = serializers.CharField(max_length=100)
-    especie = serializers.ChoiceField(choices=[("Perro","Perro"),("Gato","Gato"),("Otro","Otro")])
-    sexo = serializers.ChoiceField(choices=[("Macho","Macho"),("Hembra","Hembra"),("No informado","No informado")])
-    raza = serializers.CharField(max_length=100, allow_blank=True, required=False)
-    fecha_nacimiento = serializers.DateField(required=False, allow_null=True)
-    peso_kg = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, allow_null=True)
-    esterilizado = serializers.BooleanField(required=False, default=False)
-    microchip = serializers.CharField(max_length=50, allow_blank=True, required=False)
-    notas_salud = serializers.CharField(allow_blank=True, required=False)
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError("Este email ya está registrado.")
+        return email
 
-    def validate(self, data):
-        if data["password"] != data["password2"]:
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password2"]:
             raise serializers.ValidationError({"password2": "Las contraseñas no coinciden."})
-        if User.objects.filter(username=data["email"]).exists():
-            raise serializers.ValidationError({"email": "Ya existe un usuario con este email."})
-        return data
+        return attrs
 
-    def create(self, v):
-        full = v.pop("full_name")
-        first, *rest = full.split(" ", 1)
-        last = rest[0] if rest else ""
-        pwd = v.pop("password"); v.pop("password2")
-        email = v["email"]
-
+    @transaction.atomic
+    def create(self, validated):
+        email = validated["email"].lower()
+        # username = email (clave)
         user = User.objects.create_user(
-            username=email, email=email, first_name=first, last_name=last, password=pwd
+            username=email,
+            email=email,
+            first_name=validated.get("first_name", "").strip(),
+            last_name=validated.get("last_name", "").strip(),
+            password=validated["password"],
         )
 
+        # Cliente asociado
         cliente = Cliente.objects.create(
             user=user,
-            telefono=v.get("telefono",""),
-            direccion=v.get("direccion",""),
-            rut_dni=v.get("rut_dni",""),
-            acepta_comunicaciones=v.get("acepta_comunicaciones", False),
+            telefono=validated.get("telefono", "") or "",
+            direccion=validated.get("direccion", "") or "",
+            rut_dni=validated.get("rut_dni", "") or "",
+            acepta_comunicaciones=validated.get("acepta_comunicaciones", False),
         )
 
-        Mascota.objects.create(
-            cliente=cliente,
-            nombre=v["nombre_mascota"],
-            especie=v["especie"],
-            sexo=v["sexo"],
-            raza=v.get("raza",""),
-            fecha_nacimiento=v.get("fecha_nacimiento", None),
-            peso_kg=v.get("peso_kg", None),
-            esterilizado=v.get("esterilizado", False),
-            microchip=v.get("microchip",""),
-            notas_salud=v.get("notas_salud",""),
-        )
+        # Mascota opcional
+        nombre = (validated.get("mascota_nombre") or "").strip()
+        especie = (validated.get("mascota_especie") or "").strip()
+        if nombre and especie:
+            Mascota.objects.create(
+                cliente=cliente,
+                nombre=nombre,
+                especie=especie,
+                raza=(validated.get("mascota_raza") or "").strip(),
+            )
+
         return user
+
+
+# ---------- Citas ----------
+class CitaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Cita
+        fields = "__all__"
+
+    def validate(self, data):
+        inicio = data["inicio"]
+        fin = data["fin"]
+        if fin <= inicio:
+            raise serializers.ValidationError({"fin": "La hora de término debe ser mayor al inicio."})
+
+        vet = data.get("veterinario")
+        box = data.get("box") or "BOX-1"
+        qs = Cita.objects.filter(estado__in=["pendiente", "confirmada"], box=box)
+        if vet:
+            qs = qs.filter(veterinario=vet)
+
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        if qs.filter(inicio__lt=fin, fin__gt=inicio).exists():
+            raise serializers.ValidationError("Existe una cita solapada para ese horario/box/veterinario.")
+        return data
+
+
+# ---------- Inventario ----------
+class ProductoSerializer(serializers.ModelSerializer):
+    alerta_stock = serializers.SerializerMethodField()
+    alerta_vencimiento = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Producto
+        fields = [
+            "id",
+            "nombre",
+            "codigo",
+            "stock",
+            "stock_minimo",
+            "fecha_vencimiento",
+            "alerta_stock",
+            "alerta_vencimiento",
+        ]
+
+    def get_alerta_stock(self, obj):
+        return obj.en_alerta_stock()
+
+    def get_alerta_vencimiento(self, obj):
+        return obj.en_alerta_vencimiento()
+
+
+class MovimientoInventarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MovimientoInventario
+        fields = "__all__"
+
+
+class InventarioSerializer(serializers.Serializer):
+    stock_bajo = ProductoSerializer(many=True)
+    por_vencer = ProductoSerializer(many=True)
+
+
+User = get_user_model()
+
+class VeterinarioSerializer(serializers.ModelSerializer):
+    nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "first_name", "last_name", "email", "nombre"]
+
+    def get_nombre(self, obj):
+        full = f"{obj.first_name} {obj.last_name}".strip()
+        return full or obj.email or obj.username
