@@ -10,6 +10,11 @@ import Contacto from './pages/Contacto'
 import Registro from './pages/Registro'
 import Login from './pages/Login'
 import Logout from './pages/Logout'
+
+// 🔑 Nuevas vistas
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
+
 import { getToken } from './auth'
 
 export default function App() {
@@ -33,6 +38,11 @@ export default function App() {
           <Route path="/registro" element={<Registro />} />
           <Route path="/login" element={<Login />} />
           <Route path="/logout" element={<Logout />} />
+
+          {/* 🔑 Nuevas rutas para recuperación */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password/:uidb64/:token" element={<ResetPassword />} />
+
           {/* Redirección por defecto */}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

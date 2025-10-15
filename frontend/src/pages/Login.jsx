@@ -17,7 +17,7 @@ export default function Login() {
     try {
       const { data } = await login(email.trim(), password); // AxiosResponse
       const tokens = data?.tokens ? data.tokens : data;     // {access,refresh}
-      saveTokens(tokens);                                    // guarda en localStorage
+      saveTokens(tokens);                                   // guarda en localStorage
       navigate("/citas");
     } catch (error) {
       const data = error?.response?.data;
@@ -88,14 +88,31 @@ export default function Login() {
           <button
             disabled={loading}
             className={`w-full px-6 py-3 rounded-full text-white shadow-lg transition
-              ${loading ? "bg-emerald-300 cursor-not-allowed" : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"}`}
+              ${
+                loading
+                  ? "bg-emerald-300 cursor-not-allowed"
+                  : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+              }`}
           >
             {loading ? "Ingresando…" : "Iniciar sesión"}
           </button>
 
-          <p className="text-sm text-slate-600">
+          {/* 🔑 Enlace de recuperación de contraseña */}
+          <div className="text-right">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-emerald-600 hover:text-emerald-700 underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
+
+          <p className="text-sm text-slate-600 text-center">
             ¿No tienes cuenta?{" "}
-            <Link to="/registro" className="text-emerald-600 hover:text-emerald-700 underline">
+            <Link
+              to="/registro"
+              className="text-emerald-600 hover:text-emerald-700 underline"
+            >
               Regístrate
             </Link>
           </p>
@@ -105,8 +122,12 @@ export default function Login() {
       <section className="hidden md:block relative">
         <div className="absolute inset-0 bg-slate-400/70 rounded-l-2xl" />
         <div className="absolute bottom-8 left-8 right-8 text-white">
-          <h2 className="text-4xl font-extrabold drop-shadow">El mejor cuidado para tu mascota</h2>
-          <p className="text-white/90 mt-2">Agenda, historial y recordatorios en un solo lugar.</p>
+          <h2 className="text-4xl font-extrabold drop-shadow">
+            El mejor cuidado para tu mascota
+          </h2>
+          <p className="text-white/90 mt-2">
+            Agenda, historial y recordatorios en un solo lugar.
+          </p>
         </div>
       </section>
     </main>
