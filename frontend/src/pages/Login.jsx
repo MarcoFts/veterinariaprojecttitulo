@@ -1,6 +1,8 @@
+// frontend/src/pages/Login.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login, saveTokens } from "../../services/api"; // ← usamos saveTokens
+import { login } from "../../services/api";       // POST /api/auth/login/
+import { setTokens } from "../auth";           // guarda { access, refresh } en localStorage
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,10 +17,11 @@ export default function Login() {
     setErr("");
     setLoading(true);
     try {
-      const { data } = await login(email.trim(), password); // AxiosResponse
-      const tokens = data?.tokens ? data.tokens : data;     // {access,refresh}
-      saveTokens(tokens);                                   // guarda en localStorage
-      navigate("/citas");
+      // Llama a tu servicio de login (axios). Debe devolver { tokens: {access, refresh} } o {access, refresh}
+      const { data } = await login(email.trim(), password);
+      const tokens = data?.tokens ? data.tokens : data; // admite ambos formatos
+      setTokens(tokens);                                // guarda access/refresh en localStorage
+      navigate("/citas");                               // redirige donde quieras
     } catch (error) {
       const data = error?.response?.data;
       const msg =
@@ -86,6 +89,7 @@ export default function Login() {
           </label>
 
           <button
+            type="submit"
             disabled={loading}
             className={`w-full px-6 py-3 rounded-full text-white shadow-lg transition
               ${

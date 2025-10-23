@@ -99,4 +99,5 @@ export function getDisponibilidad({ veterinario_id, fecha, duracion, box }) {
 }
 
 export default api;
+export const getUserProfile = me;
 
