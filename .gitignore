@@ -1,45 +1,72 @@
-# --- Python/Django ---
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.sqlite3
-db.sqlite3
-.env
-.env.*
-*.log
-media/
-staticfiles/
-*.pid
-
-# venv
-venv/
-.venv/
-backend/venv/
-backend/.venv/
-
-# Migrations cache (opcional pero útil mantenerlas, comenta si quieres subirlas)
-# **/migrations/__pycache__/
-
-# --- Node/React ---
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-lock.yaml
-dist/
-build/
-.cache/
-.vite/
-
-# OS / editor
+########################
+# OS / EDITOR
+########################
 .DS_Store
 Thumbs.db
-.idea/
+*.log
 .vscode/
+.idea/
+*.swp
+*.swo
 
-# Zips y artefactos pesados
-*.zip
-*.rar
-*.tar
-*.tar.gz
+########################
+# PYTHON / DJANGO
+########################
+
+# Bytecode / caché
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+env/
+.venv/
+backend/env/
+backend/.venv/
+
+# Base de datos local
+backend/db.sqlite3
+
+# Archivos de configuración locales
+*.sqlite3
+*.db
+.env
+.env.*
+backend/.env
+backend/.env.*
+
+# Archivos de migración compilados
+*.pot
+*.pyc
+
+# Archivos de static y media generados
+backend/staticfiles/
+backend/static/
+backend/media/
+
+########################
+# NODE / REACT / VITE
+########################
+
+# Dependencias
+frontend/node_modules/
+
+# Builds
+frontend/dist/
+frontend/build/
+
+# Archivos de entorno
+frontend/.env
+frontend/.env.*
+!.env.example
+
+########################
+# OTROS
+########################
+
+# Coverage / tests
+htmlcov/
+.coverage
+.tox/
+pytest_cache/
+.coverage.*
