@@ -1,41 +1,69 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
-from .utils import user_display_name
 from .models import (
     Cliente,
     Mascota,
     Cita,
     Producto,
     MovimientoInventario,
+    HorarioAtencion,
+    BloqueoAgenda,
 )
+
 
 User = get_user_model()
 
+
 # ---------- Cliente / Mascota ----------
+
 class MascotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Mascota
+        # No exponemos el cliente aquí (va aparte)
         exclude = ("cliente",)
 
 
 class ClienteSerializer(serializers.ModelSerializer):
     nombre = serializers.SerializerMethodField()
+    mascotas = MascotaSerializer(many=True, read_only=True)
 
     class Meta:
         model = Cliente
         fields = [
-            "id", "user", "telefono", "direccion", "rut_dni",
-            "acepta_comunicaciones", "mascotas", "nombre",
+            "id",
+            "user",
+            "telefono",
+            "direccion",
+            "rut_dni",
+            "acepta_comunicaciones",
+            "mascotas",
+            "nombre",
         ]
+        read_only_fields = ["user", "mascotas", "nombre"]
 
     def get_nombre(self, obj):
         u = getattr(obj, "user", None)
-        if not u: return f"Cliente {obj.pk}"
-        return user_display_name(u)
+        if not u:
+            return f"Cliente {obj.pk}"
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.email or u.username
+
+
+class VeterinarioSerializer(serializers.ModelSerializer):
+    nombre = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "first_name", "last_name", "email", "nombre"]
+
+    def get_nombre(self, obj):
+        full = f"{obj.first_name} {obj.last_name}".strip()
+        return full or obj.email or obj.username
 
 
 # ---------- Registro ----------
+
 class RegisterSerializer(serializers.Serializer):
     # Usuario
     first_name = serializers.CharField(max_length=150)
@@ -43,11 +71,21 @@ class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
     password2 = serializers.CharField(write_only=True, min_length=8)
+
     # Cliente
-    telefono = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    direccion = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    rut_dni = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    acepta_comunicaciones = serializers.BooleanField(required=False, default=False)
+    telefono = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    direccion = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    rut_dni = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    acepta_comunicaciones = serializers.BooleanField(
+        required=False, default=False
+    )
+
     # Mascota opcional
     mascota_nombre = serializers.CharField(required=False, allow_blank=True)
     mascota_especie = serializers.CharField(required=False, allow_blank=True)
@@ -61,13 +99,16 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError({"password2": "Las contraseñas no coinciden."})
+            raise serializers.ValidationError(
+                {"password2": "Las contraseñas no coinciden."}
+            )
         return attrs
 
     @transaction.atomic
     def create(self, validated):
         email = validated["email"].lower()
-        # username = email (clave)
+
+        # username = email
         user = User.objects.create_user(
             username=email,
             email=email,
@@ -79,10 +120,12 @@ class RegisterSerializer(serializers.Serializer):
         # Cliente asociado
         cliente = Cliente.objects.create(
             user=user,
-            telefono=validated.get("telefono", "") or "",
-            direccion=validated.get("direccion", "") or "",
-            rut_dni=validated.get("rut_dni", "") or "",
-            acepta_comunicaciones=validated.get("acepta_comunicaciones", False),
+            telefono=(validated.get("telefono") or "").strip(),
+            direccion=(validated.get("direccion") or "").strip(),
+            rut_dni=(validated.get("rut_dni") or "").strip(),
+            acepta_comunicaciones=validated.get(
+                "acepta_comunicaciones", False
+            ),
         )
 
         # Mascota opcional
@@ -100,32 +143,49 @@ class RegisterSerializer(serializers.Serializer):
 
 
 # ---------- Citas ----------
+
 class CitaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cita
         fields = "__all__"
 
     def validate(self, data):
+        """
+        - Valida que fin > inicio
+        - Valida que no se solapen citas (pendiente/confirmada) para el mismo box/veterinario
+        """
         inicio = data["inicio"]
         fin = data["fin"]
         if fin <= inicio:
-            raise serializers.ValidationError({"fin": "La hora de término debe ser mayor al inicio."})
+            raise serializers.ValidationError(
+                {"fin": "La hora de término debe ser mayor al inicio."}
+            )
 
         vet = data.get("veterinario")
         box = data.get("box") or "BOX-1"
-        qs = Cita.objects.filter(estado__in=["pendiente", "confirmada"], box=box)
+
+        qs = Cita.objects.filter(
+            estado__in=["pendiente", "confirmada"],
+            box=box,
+        )
         if vet:
             qs = qs.filter(veterinario=vet)
 
+        # si estamos editando, excluir la cita actual
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
 
+        # ¿hay alguna cita que se cruce con [inicio, fin]?
         if qs.filter(inicio__lt=fin, fin__gt=inicio).exists():
-            raise serializers.ValidationError("Existe una cita solapada para ese horario/box/veterinario.")
+            raise serializers.ValidationError(
+                "Existe una cita solapada para ese horario/box/veterinario."
+            )
+
         return data
 
 
 # ---------- Inventario ----------
+
 class ProductoSerializer(serializers.ModelSerializer):
     alerta_stock = serializers.SerializerMethodField()
     alerta_vencimiento = serializers.SerializerMethodField()
@@ -160,16 +220,15 @@ class InventarioSerializer(serializers.Serializer):
     stock_bajo = ProductoSerializer(many=True)
     por_vencer = ProductoSerializer(many=True)
 
+# ---------- Horarios y bloqueos de agenda ----------
 
-User = get_user_model()
-
-class VeterinarioSerializer(serializers.ModelSerializer):
-    nombre = serializers.SerializerMethodField()
-
+class HorarioAtencionSerializer(serializers.ModelSerializer):
     class Meta:
-        model = User
-        fields = ["id", "first_name", "last_name", "email", "nombre"]
+        model = HorarioAtencion
+        fields = "__all__"
 
-    def get_nombre(self, obj):
-        full = f"{obj.first_name} {obj.last_name}".strip()
-        return full or obj.email or obj.username
+
+class BloqueoAgendaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BloqueoAgenda
+        fields = "__all__"

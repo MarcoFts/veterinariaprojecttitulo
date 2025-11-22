@@ -9,8 +9,12 @@ from .views import (
     ClienteViewSet,
     MascotaViewSet,
     CitaViewSet,
+    HorarioAtencionViewSet,
+    BloqueoAgendaViewSet,   
     ProductoViewSet,
     InventarioViewSet,
+    veterinarios,
+    disponibilidad,
     me,
 )
 
@@ -31,6 +35,8 @@ router.register(r"mascotas", MascotaViewSet, basename="mascota")
 router.register(r"citas", CitaViewSet, basename="cita")
 router.register(r"productos", ProductoViewSet, basename="producto")
 router.register(r"inventario", InventarioViewSet, basename="inventario")
+router.register(r"horarios", HorarioAtencionViewSet, basename="horario")      # 👈
+router.register(r"bloqueos", BloqueoAgendaViewSet, basename="bloqueo")        # 👈
 
 # -----------------------------
 # URLS PRINCIPALES
