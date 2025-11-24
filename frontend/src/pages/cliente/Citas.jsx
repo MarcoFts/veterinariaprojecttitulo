@@ -1,6 +1,14 @@
-// src/pages/Citas.jsx
+import LayoutCliente from "../../components/layout/LayoutCliente";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
+import {
+  CalendarDays,
+  Clock,
+  Stethoscope,
+  PawPrint,
+  User2,
+} from "lucide-react";
+
 import {
   me,
   getCitas,
@@ -12,7 +20,7 @@ import {
   getVeterinarios,
   getDisponibilidad,
 } from "../../services/api";
-import { isAuthenticated } from "../auth";
+import { isAuthenticated } from "../../auth";
 
 const DURACIONES = [15, 30, 45, 60];
 
@@ -22,59 +30,70 @@ export default function Citas() {
   const [loadingList, setLoadingList] = useState(false);
 
   const [form, setForm] = useState({
-    cliente: "",       // si vet: selecciona cliente; si dueño: el backend lo ignora
+    cliente: "",
     mascota: "",
-    veterinario: "",   // obligatorio para calcular disponibilidad
+    veterinario: "",
     box: "BOX-1",
-    hora: "10:00",     // se autocompleta al elegir un slot
+    hora: "10:00",
     duracion: 30,
     motivo: "",
   });
 
-  // contexto/estado
   const [meInfo, setMeInfo] = useState(null);
   const [isVet, setIsVet] = useState(false);
 
-  // catálogos
-  const [clientes, setClientes] = useState([]);   // sólo para vet
-  const [mascotas, setMascotas] = useState([]);   // lista general (el backend ya filtra para dueño)
+  const [clientes, setClientes] = useState([]);
+  const [mascotas, setMascotas] = useState([]);
   const [vets, setVets] = useState([]);
-  const [slots, setSlots] = useState([]);         // horarios disponibles calculados
+  const [slots, setSlots] = useState([]);
 
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState("");
 
-  // Helpers: fecha/hora → ISO
+  // Helpers fecha / hora
   const inicioISO = useMemo(() => {
     const [hh, mm] = (form.hora || "10:00").split(":").map(Number);
-    return dayjs(fecha).hour(hh).minute(mm).second(0).millisecond(0).toDate().toISOString();
+    return dayjs(fecha)
+      .hour(hh)
+      .minute(mm)
+      .second(0)
+      .millisecond(0)
+      .toDate()
+      .toISOString();
   }, [fecha, form.hora]);
 
-  const finISO = useMemo(() => {
-    return dayjs(inicioISO).add(form.duracion || 30, "minute").toDate().toISOString();
-  }, [inicioISO, form.duracion]);
+  const finISO = useMemo(
+    () => dayjs(inicioISO).add(form.duracion || 30, "minute").toDate().toISOString(),
+    [inicioISO, form.duracion]
+  );
 
-  // Cargar perfil + veterinarios + (clientes/mascotas)
+  // Perfil + catálogos
   useEffect(() => {
     if (!isAuthenticated()) return;
+
     (async () => {
       try {
-        const [{ data: meData }, { data: vetsData }] = await Promise.all([me(), getVeterinarios()]);
+        const [{ data: meData }, { data: vetsData }] = await Promise.all([
+          me(),
+          getVeterinarios(),
+        ]);
         setMeInfo(meData);
         setIsVet(!!meData?.is_vet);
         setVets(vetsData || []);
 
         if (meData?.is_vet) {
-          // Vet: puede ver todos
-          const [{ data: cls }, { data: mascData }] = await Promise.all([getClientes(), getMascotas()]);
+          const [{ data: cls }, { data: mascData }] = await Promise.all([
+            getClientes(),
+            getMascotas(),
+          ]);
+
           setClientes((cls?.results ?? cls ?? []).map((c) => ({
             id: c.id,
-            // si tu serializer de Cliente no trae nombre del user, ajusta la etiqueta aquí
             label: c.user?.email || `Cliente ${c.id}`,
           })));
+
           setMascotas(mascData?.results ?? mascData ?? []);
         } else {
-          // Dueño: backend ya filtra a sus mascotas
           const { data: mascData } = await getMascotas();
           setMascotas(mascData?.results ?? mascData ?? []);
         }
@@ -100,10 +119,13 @@ export default function Citas() {
     })();
   }, [fecha]);
 
-  // Consultar disponibilidad cuando cambien vet/fecha/duración/box
+  // Slots disponibles
   useEffect(() => {
-    const vetId = form.veterinario || null; // obligatorio para slots
-    if (!vetId || !fecha) { setSlots([]); return; }
+    const vetId = form.veterinario || null;
+    if (!vetId || !fecha) {
+      setSlots([]);
+      return;
+    }
 
     (async () => {
       try {
@@ -134,9 +156,10 @@ export default function Citas() {
 
     setCreating(true);
     setErr("");
+
     try {
       const payload = {
-        cliente: isVet ? (form.cliente || null) : null, // si eres dueño, el backend fuerza tu cliente
+        cliente: isVet ? form.cliente || null : null,
         mascota: form.mascota,
         veterinario: form.veterinario,
         box: form.box || "BOX-1",
@@ -144,10 +167,10 @@ export default function Citas() {
         fin: finISO,
         motivo: form.motivo?.trim() || "",
       };
+
       await apiCrearCita(payload);
       const resp = await getCitas({ fecha });
       setItems(resp.data?.results || resp.data || []);
-      // limpiar campo motivo; mantenemos la selección actual para seguir agendando
       setForm((f) => ({ ...f, motivo: "" }));
     } catch (e) {
       const msg = e?.response?.data || e.message || "No se pudo crear la cita.";
@@ -178,48 +201,91 @@ export default function Citas() {
     }
   };
 
-  // Mascotas filtradas por cliente cuando el vet elige uno
   const mascotasFiltradas =
     isVet && form.cliente
-      ? mascotas.filter((m) => m.cliente === Number(form.cliente) || m.cliente?.id === Number(form.cliente))
+      ? mascotas.filter(
+          (m) =>
+            m.cliente === Number(form.cliente) ||
+            m.cliente?.id === Number(form.cliente)
+        )
       : mascotas;
 
   return (
-    <div className="min-h-[80vh] bg-[#f2fffc]">
+    <LayoutCliente>
+    <div className="min-h-[80vh] bg-slate-50">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+        {/* Encabezado */}
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Citas</h1>
-            <p className="text-slate-600">
-              {isVet ? "Agenda y gestiona todas las atenciones." : "Agenda y gestiona tus atenciones."}
+            <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
+              VetCare · {isVet ? "Veterinario" : "Cliente"}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                <CalendarDays size={20} />
+              </span>
+              <span>Citas</span>
+            </h1>
+            <p className="text-sm text-slate-600 mt-1">
+              {isVet
+                ? "Agenda y gestiona todas las atenciones de la clínica."
+                : "Agenda y gestiona tus atenciones en la clínica veterinaria."}
             </p>
           </div>
+
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 bg-white rounded-xl px-3 py-2 shadow-sm border border-slate-100">
+              <Clock size={16} className="text-sky-500" />
+              <span>Selecciona fecha para ver las citas del día.</span>
+            </div>
             <input
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-2 bg-white"
+              className="border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm shadow-sm"
             />
           </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Formulario crear */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow">
-            <h2 className="font-semibold text-slate-800 mb-4">Crear nueva cita</h2>
-            <form onSubmit={crear} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Formulario */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-semibold text-slate-800 flex items-center gap-2">
+                  <Stethoscope size={18} className="text-sky-600" />
+                  Crear nueva cita
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Completa los datos para agendar una nueva atención.
+                </p>
+              </div>
 
-              {/* Veterinario + Fecha (para disponibilidad) */}
+              {meInfo && (
+                <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-full px-3 py-1">
+                  <User2 size={14} className="text-slate-600" />
+                  <span>
+                    Sesión: {isVet ? "Profesional" : "Cliente"}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={crear} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Vet + Fecha */}
               <div>
                 <label className="block text-sm text-slate-600 mb-1">Veterinario</label>
                 <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   value={form.veterinario}
                   onChange={(e) => setForm({ ...form, veterinario: e.target.value })}
                 >
                   <option value="">Seleccionar…</option>
-                  {vets.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+                  {vets.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -229,22 +295,26 @@ export default function Citas() {
                   type="date"
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                 />
               </div>
 
-              {/* Cliente (sólo vet) */}
+              {/* Cliente (solo vet) */}
               {isVet && (
                 <div className="md:col-span-2">
                   <label className="block text-sm text-slate-600 mb-1">Cliente</label>
                   <select
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                     value={form.cliente}
-                    onChange={(e) => setForm({ ...form, cliente: e.target.value, mascota: "" })}
+                    onChange={(e) =>
+                      setForm({ ...form, cliente: e.target.value, mascota: "" })
+                    }
                   >
                     <option value="">Seleccionar…</option>
                     {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>{c.label}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -252,9 +322,12 @@ export default function Citas() {
 
               {/* Mascota */}
               <div className="md:col-span-2">
-                <label className="block text-sm text-slate-600 mb-1">Mascota</label>
+                <label className="block text-sm text-slate-600 mb-1 flex items-center gap-1.5">
+                  <PawPrint size={15} className="text-sky-600" />
+                  Mascota
+                </label>
                 <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   value={form.mascota}
                   onChange={(e) => setForm({ ...form, mascota: e.target.value })}
                 >
@@ -267,13 +340,19 @@ export default function Citas() {
                 </select>
               </div>
 
-              {/* Slots disponibles */}
+              {/* Slots */}
               <div className="md:col-span-2">
-                <label className="block text-sm text-slate-600 mb-1">Horarios disponibles</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  Horarios disponibles
+                </label>
                 {!form.veterinario ? (
-                  <p className="text-sm text-slate-500">Elige un veterinario para ver horarios.</p>
+                  <p className="text-sm text-slate-500">
+                    Elige un veterinario para ver horarios disponibles.
+                  </p>
                 ) : slots.length === 0 ? (
-                  <p className="text-sm text-slate-500">No hay horarios disponibles para esta selección.</p>
+                  <p className="text-sm text-slate-500">
+                    No hay horarios disponibles para esta selección.
+                  </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {slots.map((hhmm) => (
@@ -281,12 +360,11 @@ export default function Citas() {
                         key={hhmm}
                         type="button"
                         onClick={() => setForm({ ...form, hora: hhmm })}
-                        className={`px-3 py-1.5 rounded-lg border text-sm ${
+                        className={`px-3 py-1.5 rounded-lg border text-xs md:text-sm ${
                           form.hora === hhmm
-                            ? "bg-emerald-500 text-white border-emerald-500"
-                            : "border-slate-300 hover:bg-slate-50"
+                            ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                            : "border-slate-300 text-slate-700 hover:bg-slate-50"
                         }`}
-                        title={`Elegir ${hhmm}`}
                       >
                         {hhmm}
                       </button>
@@ -295,16 +373,20 @@ export default function Citas() {
                 )}
               </div>
 
-              {/* Duración / Box */}
+              {/* Duración / Box / Hora */}
               <div>
                 <label className="block text-sm text-slate-600 mb-1">Duración</label>
                 <select
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   value={form.duracion}
-                  onChange={(e) => setForm({ ...form, duracion: Number(e.target.value) })}
+                  onChange={(e) =>
+                    setForm({ ...form, duracion: Number(e.target.value) })
+                  }
                 >
                   {DURACIONES.map((d) => (
-                    <option key={d} value={d}>{d} min</option>
+                    <option key={d} value={d}>
+                      {d} min
+                    </option>
                   ))}
                 </select>
               </div>
@@ -312,19 +394,18 @@ export default function Citas() {
               <div>
                 <label className="block text-sm text-slate-600 mb-1">Box</label>
                 <input
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   value={form.box}
                   onChange={(e) => setForm({ ...form, box: e.target.value })}
                   placeholder="BOX-1"
                 />
               </div>
 
-              {/* Hora editable (por si quiere ajustar manualmente) */}
               <div>
                 <label className="block text-sm text-slate-600 mb-1">Hora</label>
                 <input
                   type="time"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   value={form.hora}
                   onChange={(e) => setForm({ ...form, hora: e.target.value })}
                   required
@@ -333,25 +414,29 @@ export default function Citas() {
 
               {/* Motivo */}
               <div className="md:col-span-2">
-                <label className="block text-sm text-slate-600 mb-1">Motivo</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  Motivo de la consulta
+                </label>
                 <input
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   placeholder="Control, vacunas, urgencia, etc."
                   value={form.motivo}
                   onChange={(e) => setForm({ ...form, motivo: e.target.value })}
                 />
               </div>
 
-              {/* Resumen y CTA */}
-              <div className="md:col-span-2 flex items-center justify-between text-sm text-slate-600">
+              {/* Resumen + CTA */}
+              <div className="md:col-span-2 flex flex-col md:flex-row md:items-center md:justify-between gap-2 text-xs md:text-sm text-slate-600 mt-1">
                 <div>
-                  <span className="font-medium">Inicio:</span> {formatLocal(inicioISO)} &nbsp; | &nbsp;
-                  <span className="font-medium">Fin:</span> {formatLocal(finISO)}
+                  <span className="font-medium">Inicio:</span> {formatLocal(inicioISO)}{" "}
+                  · <span className="font-medium">Fin:</span> {formatLocal(finISO)}
                 </div>
                 <button
                   disabled={creating}
-                  className={`px-5 py-2 rounded-lg text-white shadow ${
-                    creating ? "bg-emerald-300 cursor-not-allowed" : "bg-emerald-500 hover:bg-emerald-600"
+                  className={`inline-flex items-center justify-center rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition ${
+                    creating
+                      ? "bg-emerald-300 cursor-not-allowed"
+                      : "bg-emerald-500 hover:bg-emerald-600 hover:shadow-lg"
                   }`}
                 >
                   {creating ? "Creando…" : "Crear cita"}
@@ -361,25 +446,35 @@ export default function Citas() {
           </section>
 
           {/* Listado del día */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow">
-            <h2 className="font-semibold text-slate-800 mb-4">
+          <section className="bg-white border border-slate-200 rounded-2xl p-5 md:p-6 shadow-sm">
+            <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+              <Clock size={18} className="text-sky-600" />
               Citas del {dayjs(fecha).format("DD MMM YYYY")}
             </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Visualiza las atenciones agendadas para la fecha seleccionada.
+            </p>
+
             {loadingList ? (
-              <p className="text-sm text-slate-500">Cargando…</p>
+              <p className="text-sm text-slate-500">Cargando citas…</p>
             ) : err ? (
               <p className="text-sm text-rose-600">{err}</p>
             ) : items.length === 0 ? (
-              <p className="text-sm text-slate-500">No hay citas para esta fecha.</p>
+              <p className="text-sm text-slate-500">
+                No hay citas registradas para esta fecha.
+              </p>
             ) : (
               <ul className="space-y-3">
                 {items.map((c) => (
-                  <li key={c.id} className="border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+                  <li
+                    key={c.id}
+                    className="border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-3"
+                  >
                     <div className="min-w-0">
-                      <div className="font-medium text-slate-800">
+                      <div className="font-medium text-slate-800 flex items-center gap-2">
                         {formatLocal(c.inicio)} — {formatLocal(c.fin)}
                         <span
-                          className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                          className={`ml-1 text-[11px] px-2 py-0.5 rounded-full capitalize ${
                             c.estado === "confirmada"
                               ? "bg-emerald-100 text-emerald-700"
                               : c.estado === "cancelada"
@@ -390,8 +485,12 @@ export default function Citas() {
                           {c.estado}
                         </span>
                       </div>
-                      <div className="text-sm text-slate-600 truncate">
-                        {c.mascota ? `${c.mascota.nombre ?? ""}${c.mascota.especie ? ` — ${c.mascota.especie}` : ""}` : "Sin mascota"}
+                      <div className="text-xs text-slate-600 truncate mt-0.5">
+                        {c.mascota
+                          ? `${c.mascota.nombre ?? ""}${
+                              c.mascota.especie ? ` · ${c.mascota.especie}` : ""
+                            }`
+                          : "Sin mascota asociada"}
                         {c.motivo ? ` · ${c.motivo}` : ""}
                       </div>
                     </div>
@@ -400,7 +499,7 @@ export default function Citas() {
                       {c.estado !== "confirmada" && c.estado !== "cancelada" && (
                         <button
                           onClick={() => onConfirmar(c.id)}
-                          className="px-3 py-1.5 rounded-md text-white bg-emerald-500 hover:bg-emerald-600 text-sm"
+                          className="px-3 py-1.5 rounded-md text-xs text-white bg-emerald-500 hover:bg-emerald-600"
                         >
                           Confirmar
                         </button>
@@ -408,7 +507,7 @@ export default function Citas() {
                       {c.estado !== "cancelada" && (
                         <button
                           onClick={() => onCancelar(c.id)}
-                          className="px-3 py-1.5 rounded-md text-rose-600 border border-rose-300 hover:bg-rose-50 text-sm"
+                          className="px-3 py-1.5 rounded-md text-xs text-rose-600 border border-rose-300 hover:bg-rose-50"
                         >
                           Cancelar
                         </button>
@@ -422,6 +521,7 @@ export default function Citas() {
         </div>
       </div>
     </div>
+    </LayoutCliente>
   );
 }
 
