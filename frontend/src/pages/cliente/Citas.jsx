@@ -1,32 +1,35 @@
 import LayoutCliente from "../../components/layout/LayoutCliente";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
-import { CalendarDays, Clock, Stethoscope, PawPrint, User2 } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  Stethoscope,
+  PawPrint,
+  User2,
+} from "lucide-react";
+import api, { getVeterinarios, getMascotas, getCitas, crearCita } from "../../services/api";
 
-// Opciones de prueba (luego se reemplazan por datos reales del backend)
 const DURACIONES = [15, 30, 45, 60];
 const BOXES = ["BOX-1", "BOX-2"];
-const VETERINARIOS_DEMO = [
-  { id: 1, nombre: "Dr. Pérez" },
-  { id: 2, nombre: "Dra. González" },
-];
-const MASCOTAS_DEMO = [
-  { id: 1, nombre: "Luna" },
-  { id: 2, nombre: "Rocky" },
-];
 
 export default function Citas() {
   const [fecha, setFecha] = useState(dayjs().format("YYYY-MM-DD"));
+
   const [form, setForm] = useState({
-    veterinario: "",
-    mascota: "",
+    veterinario_id: "",
+    mascota_id: "",
     duracion: 30,
     box: "BOX-1",
     hora: "10:00",
     motivo: "",
   });
 
+  const [veterinarios, setVeterinarios] = useState([]);
+  const [mascotas, setMascotas] = useState([]);
   const [citasDia, setCitasDia] = useState([]);
+
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,35 +38,76 @@ export default function Citas() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  // cargar datos de backend
+  useEffect(() => {
+    const loadAll = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [vetsResp, petsResp, citasResp] = await Promise.all([
+          getVeterinarios(),
+          getMascotas(),
+          getCitas({ fecha }),
+        ]);
+
+        setVeterinarios(vetsResp.data || []);
+        setMascotas(petsResp.data || []);
+        setCitasDia(citasResp.data || []);
+      } catch (err) {
+        if (err?.response?.status === 401) {
+          setError("Tu sesión expiró. Vuelve a iniciar sesión.");
+        } else {
+          setError("No se pudo cargar la información del servidor.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAll();
+  }, [fecha]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Validación súper básica front
-    if (!form.veterinario || !form.mascota || !form.motivo) {
+    if (!form.veterinario_id || !form.mascota_id || !form.motivo) {
       setError("Completa los campos obligatorios para crear la cita.");
       return;
     }
 
     setCreating(true);
+    try {
+      const inicio = dayjs(`${fecha} ${form.hora}`);
+      const fin = inicio.add(Number(form.duracion), "minute");
 
-    // TODO: conectar con el backend (Django + DRF)
-    // Aquí se haría el POST real a /api/citas/
-    setTimeout(() => {
-      const nuevaCita = {
-        id: Date.now(),
-        ...form,
-        fecha,
+      const payload = {
+        veterinario: Number(form.veterinario_id),
+        mascota: Number(form.mascota_id),
+        box: form.box,
+        motivo: form.motivo,
+        inicio: inicio.toISOString(),
+        fin: fin.toISOString(),
       };
-      setCitasDia((prev) => [...prev, nuevaCita]);
+
+      const resp = await crearCita(payload);
+      // backend devuelve la cita creada
+      setCitasDia((prev) => [...prev, resp.data]);
+      setForm((prev) => ({ ...prev, motivo: "" }));
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        setError("No autorizado. Inicia sesión otra vez.");
+      } else {
+        setError("No se pudo crear la cita. Revisa los datos.");
+      }
+    } finally {
       setCreating(false);
-    }, 500);
+    }
   };
 
   return (
     <LayoutCliente>
       <div className="space-y-8">
-        {/* Encabezado */}
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
@@ -80,49 +124,34 @@ export default function Citas() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center gap-2 text-xs text-slate-500 bg-white/70 backdrop-blur-md rounded-full px-3 py-1 shadow-sm border border-slate-100">
-              <User2 size={14} className="text-sky-600" />
-              <span>Estos datos se conectarán al backend en el futuro.</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 hidden md:inline">
-                Selecciona fecha para ver las citas del día.
-              </span>
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="border border-slate-200 rounded-xl px-3 py-2 bg-white/80 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 hidden md:inline">
+              Selecciona fecha para ver las citas del día.
+            </span>
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="border border-slate-200 rounded-xl px-3 py-2 bg-white/80 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+            />
           </div>
         </header>
 
-        {/* Contenido principal */}
+        {error && (
+          <div className="rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-600">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Formulario */}
           <section className="bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl p-5 md:p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-                  <Stethoscope size={18} className="text-sky-600" />
-                  Crear nueva cita
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Completa los datos para agendar una nueva atención.
-                </p>
-              </div>
-            </div>
-
-            {error && (
-              <div className="mb-3 rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-600">
-                {error}
-              </div>
-            )}
+            <h2 className="font-semibold text-slate-800 flex items-center gap-2 mb-4">
+              <Stethoscope size={18} className="text-sky-600" />
+              Crear nueva cita
+            </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-              {/* Fila 1: Vet / Fecha */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
@@ -130,13 +159,13 @@ export default function Citas() {
                     Veterinario
                   </label>
                   <select
-                    name="veterinario"
-                    value={form.veterinario}
+                    name="veterinario_id"
+                    value={form.veterinario_id}
                     onChange={handleChange}
                     className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                   >
                     <option value="">Seleccionar…</option>
-                    {VETERINARIOS_DEMO.map((v) => (
+                    {veterinarios.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.nombre}
                       </option>
@@ -158,20 +187,19 @@ export default function Citas() {
                 </div>
               </div>
 
-              {/* Fila 2: Mascota */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
                   <PawPrint size={14} className="text-sky-500" />
                   Mascota
                 </label>
                 <select
-                  name="mascota"
-                  value={form.mascota}
+                  name="mascota_id"
+                  value={form.mascota_id}
                   onChange={handleChange}
                   className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                 >
                   <option value="">Seleccionar…</option>
-                  {MASCOTAS_DEMO.map((m) => (
+                  {mascotas.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.nombre}
                     </option>
@@ -179,7 +207,6 @@ export default function Citas() {
                 </select>
               </div>
 
-              {/* Fila 3: Duración / Box */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-slate-600">
@@ -218,7 +245,6 @@ export default function Citas() {
                 </div>
               </div>
 
-              {/* Fila 4: Hora */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">
                   Hora
@@ -232,7 +258,6 @@ export default function Citas() {
                 />
               </div>
 
-              {/* Fila 5: Motivo */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">
                   Motivo de la consulta
@@ -247,11 +272,7 @@ export default function Citas() {
                 />
               </div>
 
-              {/* Acción */}
               <div className="flex items-center justify-between pt-1">
-                <p className="text-[11px] text-slate-400">
-                  *Las citas se conectarán al backend de VetCare en el futuro.
-                </p>
                 <button
                   type="submit"
                   disabled={creating}
@@ -267,20 +288,18 @@ export default function Citas() {
             </form>
           </section>
 
-          {/* Listado del día */}
+          {/* Listado */}
           <section className="bg-white/60 backdrop-blur-md border border-white/60 rounded-2xl p-5 md:p-6 shadow-xl">
             <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
               <Clock size={18} className="text-sky-600" />
               Citas del {dayjs(fecha).format("DD MMM YYYY")}
             </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Visualiza las atenciones agendadas para la fecha seleccionada.
-            </p>
 
-            {citasDia.length === 0 ? (
+            {loading ? (
+              <p className="text-sm text-slate-500">Cargando citas…</p>
+            ) : citasDia.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-4 py-6 text-sm text-slate-500">
-                No hay citas registradas para esta fecha. <br />
-                Estas se mostrarán aquí cuando el backend esté conectado.
+                No hay citas registradas para esta fecha.
               </div>
             ) : (
               <ul className="space-y-3 text-sm">
@@ -291,14 +310,14 @@ export default function Citas() {
                   >
                     <div>
                       <p className="font-medium text-slate-800">
-                        {cita.hora} · {cita.motivo || "Consulta"}
+                        {dayjs(cita.inicio).format("HH:mm")} · {cita.motivo || "Consulta"}
                       </p>
                       <p className="text-xs text-slate-500">
-                        Duración: {cita.duracion} min · Box: {cita.box}
+                        Box: {cita.box}
                       </p>
                     </div>
                     <span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[11px] px-2 py-1">
-                      Pendiente
+                      {cita.estado || "Pendiente"}
                     </span>
                   </li>
                 ))}

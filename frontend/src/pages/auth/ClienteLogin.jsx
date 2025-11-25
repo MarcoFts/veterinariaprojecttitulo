@@ -1,35 +1,33 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { login } from "../../services/api";
+import { setTokens } from "../../auth";
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
 
-  const handleChange = (e) => {
-    setForm((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  };
+  const handleChange = (e) =>
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
 
-    // 🔒 FUTURA AUTENTICACIÓN REAL (cuando conectemos backend)
-    /*
-    const response = await api.loginCliente(form.email, form.password);
-    if (response.ok) {
+    try {
+      const resp = await login(form.email, form.password);
+
+      // resp.data trae { access, refresh }
+      setTokens({
+        access: resp.data.access,
+        refresh: resp.data.refresh,
+      });
+
       navigate("/cliente/home");
-    } else {
-      setError("Credenciales incorrectas");
+    } catch (err) {
+      setError("Credenciales incorrectas o usuario no existe.");
     }
-    */
-
-    // 👉 NAVEGACIÓN TEMPORAL (solo frontend)
-    navigate("/cliente/home");
   };
 
   return (
@@ -67,7 +65,7 @@ export default function ClienteLogin() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
               focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="cliente@ejemplo.cl"
-              // required  ← se activará cuando el backend esté listo
+              required
             />
           </div>
 
@@ -88,9 +86,14 @@ export default function ClienteLogin() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
               focus:outline-none focus:ring-2 focus:ring-sky-500"
               placeholder="••••••••"
-              // required  ← se activará cuando el backend esté listo
+              required
             />
           </div>
+
+          {/* ERROR */}
+          {error && (
+            <p className="text-red-600 text-sm mt-1">{error}</p>
+          )}
 
           {/* OLVIDÉ CONTRASEÑA */}
           <div className="flex justify-end">
@@ -134,9 +137,17 @@ export default function ClienteLogin() {
         </div>
 
         <p className="mt-3 text-[11px] text-slate-400 text-center">
-          *Este formulario por ahora solo maneja navegación en frontend. La
-          autenticación real se conectará al backend en el futuro.*
+          *Autenticación conectada al backend con JWT.*
         </p>
+
+        <div className="mt-4 text-center">
+          <Link
+            to="/"
+            className="text-xs font-medium text-sky-600 hover:text-blue-700"
+          >
+            Volver al inicio
+          </Link>
+        </div>
       </div>
     </div>
   );

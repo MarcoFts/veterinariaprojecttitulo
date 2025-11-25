@@ -1,5 +1,6 @@
 import LayoutCliente from "../../components/layout/LayoutCliente";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   PawPrint,
   Dog,
@@ -10,8 +11,11 @@ import {
   ScanLine,
   FileText,
 } from "lucide-react";
+import api from "../../services/api"; // instancia axios
 
 export default function RegistrarMascota() {
+  const navigate = useNavigate();
+
   const [pet, setPet] = useState({
     nombre: "",
     especie: "",
@@ -25,6 +29,7 @@ export default function RegistrarMascota() {
   });
 
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -34,21 +39,40 @@ export default function RegistrarMascota() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // TODO: aquí se conectará al backend (Django + DRF)
-    // Ejemplo futuro:
-    // await api.post("/mascotas/", pet)
-
     setSaving(true);
-    setTimeout(() => {
+    setError("");
+  
+    try {
+      const payload = {
+        nombre: pet.nombre,
+        especie: pet.especie,
+        raza: pet.raza || null,
+        sexo:
+          pet.sexo === "macho"
+            ? "Macho"
+            : pet.sexo === "hembra"
+            ? "Hembra"
+            : "No informado",
+        fecha_nacimiento: pet.fechaNacimiento || null,
+        peso_kg: pet.peso ? Number(pet.peso) : null,
+        esterilizado: !!pet.esterilizado,
+        microchip: pet.microchip || null,
+        notas_salud: pet.notas || "",
+      };
+  
+      await api.post("/mascotas/", payload);
+  
       setSaving(false);
-      // Por ahora solo mostramos en consola
-      console.log("Mascota registrada (demo):", pet);
-    }, 600);
-  };
-
+      navigate("/cliente/home"); // <- IMPORTANTE: ruta existe
+    } catch (err) {
+      setSaving(false);
+      setError("No se pudo registrar la mascota.");
+      console.log(err?.response?.data);
+    }
+  };  
+  
   return (
     <LayoutCliente>
       <div className="space-y-8">
@@ -175,6 +199,7 @@ export default function RegistrarMascota() {
                 </label>
                 <input
                   type="number"
+                  step="0.1"
                   name="peso"
                   value={pet.peso}
                   onChange={handleChange}
@@ -206,7 +231,8 @@ export default function RegistrarMascota() {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
                 <ScanLine size={14} className="text-sky-500" />
-                Microchip <span className="text-[11px] text-slate-400">(opcional)</span>
+                Microchip{" "}
+                <span className="text-[11px] text-slate-400">(opcional)</span>
               </label>
               <input
                 type="text"
@@ -233,6 +259,11 @@ export default function RegistrarMascota() {
                 className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 resize-none"
               />
             </div>
+
+            {/* Error */}
+            {error && (
+              <p className="text-red-600 text-sm mt-2">{error}</p>
+            )}
 
             {/* Footer / CTA */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">

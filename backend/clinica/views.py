@@ -1,19 +1,17 @@
 from datetime import datetime, timedelta, time
-
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models import Q
-
+from django.shortcuts import get_object_or_404
+from rest_framework import viewsets, status, mixins, serializers as drf_serializers
 from rest_framework import viewsets, status, mixins
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
-
 from rest_framework_simplejwt.tokens import RefreshToken
-
 from .models import Cliente, Mascota, Cita, Producto, HorarioAtencion, BloqueoAgenda
 from .serializers import (
     ClienteSerializer,
@@ -66,15 +64,26 @@ class MascotaViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         u = self.request.user
-        if user_is_vet(u):
-            # veterinario puede asignar cliente manualmente
-            serializer.save()
-        else:
-            cliente = getattr(u, "cliente", None)
-            if not cliente:
-                raise PermissionDenied("Tu usuario no tiene ficha de cliente.")
-            # asocia la mascota al cliente logueado
+
+        # vet/admin exige cliente_id
+        if user_is_vet(u) or u.is_staff:
+            cliente_id = self.request.data.get("cliente_id")
+            if not cliente_id:
+                raise drf_serializers.ValidationError(
+                    {"cliente_id": "Debes enviar cliente_id"}
+                )
+            cliente = get_object_or_404(Cliente, id=cliente_id)
             serializer.save(cliente=cliente)
+            return
+
+        # cliente normal: buscar su ficha
+        cliente = Cliente.objects.filter(user=u).first()
+        if not cliente:
+            raise drf_serializers.ValidationError(
+                {"detail": "Tu usuario no tiene ficha de cliente. Regístrate como cliente o crea la ficha en admin."}
+            )
+
+        serializer.save(cliente=cliente)
 
 # ---------- HORARIOS DE ATENCIÓN ----------
 class HorarioAtencionViewSet(viewsets.ModelViewSet):
@@ -107,14 +116,12 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         u = self.request.user
 
-        # Veterinario: fuerza su propio usuario como veterinario
-        if user_is_vet(u) and not u.is_staff:
+        # Si es veterinario (grupo veterinarios o staff), auto-asignar siempre
+        if user_is_vet(u):
             serializer.save(veterinario=u)
-        elif u.is_staff:
-            # Admin: puede mandar veterinario_id en el body
-            serializer.save()
-        else:
-            raise PermissionDenied("No tienes permiso para crear horarios.")
+            return
+
+        raise PermissionDenied("No tienes permiso para crear horarios.")
 
     def perform_update(self, serializer):
         u = self.request.user

@@ -11,11 +11,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
-
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .auth_serializers import EmailTokenObtainPairSerializer
 
 
 User = get_user_model()
-
+class EmailTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailTokenObtainPairSerializer
 # -----------------------------
 # LOGIN
 # -----------------------------

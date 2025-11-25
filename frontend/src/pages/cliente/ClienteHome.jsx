@@ -55,7 +55,7 @@ export default function ClienteHome() {
             </div>
 
             <Link
-              to="/citas"
+              to="/cliente/citas"
               className="mt-5 self-start text-xs font-semibold text-sky-600 hover:text-blue-700 transition"
             >
               Agendar ahora
@@ -76,7 +76,7 @@ export default function ClienteHome() {
             </div>
 
             <Link
-              to="/registrar-mascotas"
+              to="/cliente/mascotas/registrar"
               className="mt-5 self-start text-xs font-semibold text-sky-600 hover:text-blue-700 transition"
             >
               Registrar mascota

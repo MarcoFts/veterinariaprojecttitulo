@@ -1,6 +1,12 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
+import { isAuthenticated } from "../../auth";
 
 export default function SeleccionLogin() {
+  // Si ya hay sesión, no mostrar selección → volver al home cliente
+  if (isAuthenticated()) {
+    return <Navigate to="/cliente/home" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col md:flex-row">
@@ -75,13 +81,13 @@ export default function SeleccionLogin() {
                     Agenda horas, gestiona tus mascotas y revisa tu historial.
                   </p>
 
-                  <button
+                  <span
                     className="mt-3 inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs md:text-sm font-semibold 
                     bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md 
                     group-hover:shadow-lg group-hover:opacity-95 transition"
                   >
                     Entrar como Cliente
-                  </button>
+                  </span>
                 </div>
               </div>
             </Link>
@@ -104,13 +110,13 @@ export default function SeleccionLogin() {
                     Administra tu agenda, pacientes y panel clínico.
                   </p>
 
-                  <button
+                  <span
                     className="mt-3 inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs md:text-sm font-semibold 
                     bg-gradient-to-r from-blue-500 to-sky-600 text-white shadow-md 
                     group-hover:shadow-lg group-hover:opacity-95 transition"
                   >
                     Entrar como Veterinario
-                  </button>
+                  </span>
                 </div>
               </div>
             </Link>

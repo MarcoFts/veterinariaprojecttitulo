@@ -1,41 +1,45 @@
 // frontend/src/auth.js
 
-export const TOKEN_KEY = "access";
-export const REFRESH_KEY = "refresh";
+const ACCESS_KEY = "access";
+const REFRESH_KEY = "refresh";
 
-// guardar tokens
+// Guardar tokens
 export const setTokens = ({ access, refresh }) => {
-  if (access) localStorage.setItem(TOKEN_KEY, access);
+  if (access) localStorage.setItem(ACCESS_KEY, access);
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
 };
 
-// getters
-export const getAccessToken = () => localStorage.getItem(TOKEN_KEY);
-export const getRefresh = () => localStorage.getItem(REFRESH_KEY);
+// Obtener tokens
+export const getAccessToken = () => localStorage.getItem(ACCESS_KEY);
+export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
 
-// compat para código existente
+// Compat con código viejo
 export const getToken = getAccessToken;
+export const getRefresh = getRefreshToken;
 
-// estado de autenticación
-export const isAuthenticated = () => Boolean(getAccessToken());
-
-// logout
+// Logout limpio
 export const logout = () => {
-  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
 };
 
-// fetch autenticado (si lo necesitas)
+// Estado auth simple
+export const isAuthenticated = () => Boolean(getAccessToken());
+
+// fetch autenticado (por si lo usas fuera de axios)
 export const authFetch = async (url, options = {}) => {
   const t = getAccessToken();
-  const headers = { ...(options.headers || {}), "Content-Type": "application/json" };
+  const headers = {
+    ...(options.headers || {}),
+    "Content-Type": "application/json",
+  };
   if (t) headers.Authorization = `Bearer ${t}`;
   return fetch(url, { ...options, headers });
 };
 
-// refrescar access con refresh (opcional)
+// Refrescar access manual (para RequireAuth)
 export const refreshAccess = async () => {
-  const refresh = getRefresh();
+  const refresh = getRefreshToken();
   if (!refresh) return false;
 
   try {
@@ -44,10 +48,15 @@ export const refreshAccess = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh }),
     });
+
     if (!res.ok) return false;
+
     const data = await res.json();
-    if (data?.access) localStorage.setItem(TOKEN_KEY, data.access);
-    return Boolean(data?.access);
+    if (data?.access) {
+      localStorage.setItem(ACCESS_KEY, data.access);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }

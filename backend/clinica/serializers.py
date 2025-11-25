@@ -223,12 +223,45 @@ class InventarioSerializer(serializers.Serializer):
 # ---------- Horarios y bloqueos de agenda ----------
 
 class HorarioAtencionSerializer(serializers.ModelSerializer):
+    veterinario = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = HorarioAtencion
         fields = "__all__"
+        read_only_fields = ("veterinario",)
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        vet = getattr(request, "user", None)
+
+        dia = attrs.get("dia_semana")
+        inicio = attrs.get("inicio")
+        fin = attrs.get("fin")
+        box = attrs.get("box", "")
+
+        if inicio >= fin:
+            raise serializers.ValidationError(
+                "La hora de inicio debe ser menor a la hora fin."
+            )
+
+        # evita duplicado exacto (mismo unique_together)
+        if vet and HorarioAtencion.objects.filter(
+            veterinario=vet,
+            dia_semana=dia,
+            inicio=inicio,
+            fin=fin,
+            box=box,
+        ).exists():
+            raise serializers.ValidationError(
+                "Ya existe un bloque idéntico para este día."
+            )
+
+        return attrs
 
 class BloqueoAgendaSerializer(serializers.ModelSerializer):
+    veterinario = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = BloqueoAgenda
         fields = "__all__"
+        read_only_fields = ("veterinario",)

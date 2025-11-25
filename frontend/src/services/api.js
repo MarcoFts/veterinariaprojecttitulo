@@ -1,36 +1,31 @@
-// frontend/services/api.js
+// frontend/src/services/api.js
 import axios from "axios";
+import {
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+  logout,
+} from "../auth";
 
-// --- claves de storage (coinciden con tu auth.js) ---
-const ACCESS_KEY = "access";
-const REFRESH_KEY = "refresh";
-
-export const getAccess = () => localStorage.getItem(ACCESS_KEY);
-export const getRefresh = () => localStorage.getItem(REFRESH_KEY);
-export const saveTokens = ({ access, refresh }) => {
-  if (access) localStorage.setItem(ACCESS_KEY, access);
-  if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-};
-export const clearTokens = () => {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
-};
-
-// --- instancia axios ---
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
-  timeout: 15000,
+  baseURL: "http://127.0.0.1:8000/api",
 });
 
-// --- interceptor: adjunta Authorization ---
+// --- interceptor request: adjunta Authorization siempre ---
 api.interceptors.request.use((config) => {
-  const t = getAccess();
-  if (t) config.headers.Authorization = `Bearer ${t}`;
+  const token = getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
-// --- refresh automático en 401 ---
-let refreshing = null;
+// --- login ---
+export const login = (email, password) =>
+  api.post("/auth/login/", { email, password });
+
+// --- refresh automático en 401 (robusto) ---
+let refreshingPromise = null;
 
 api.interceptors.response.use(
   (res) => res,
@@ -38,34 +33,44 @@ api.interceptors.response.use(
     const original = error.config;
     const status = error?.response?.status;
 
-    // ya intentado? evita bucle
+    // si es login o refresh y falla, no intentes refrescar
+    if (
+      original?.url?.includes("/auth/login/") ||
+      original?.url?.includes("/auth/refresh/")
+    ) {
+      return Promise.reject(error);
+    }
+
     if (status === 401 && !original._retry) {
       original._retry = true;
 
-      const refresh = getRefresh();
+      const refresh = getRefreshToken();
       if (!refresh) {
-        clearTokens();
+        logout();
         return Promise.reject(error);
       }
 
       try {
-        // serializa refresh si varios 401 llegan juntos
-        if (!refreshing) {
-          refreshing = api.post("/auth/refresh/", { refresh });
+        if (!refreshingPromise) {
+          const plain = axios.create({
+            baseURL: "http://127.0.0.1:8000/api",
+          });
+          refreshingPromise = plain.post("/auth/refresh/", { refresh });
         }
-        const resp = await refreshing;
-        refreshing = null;
+
+        const resp = await refreshingPromise;
+        refreshingPromise = null;
 
         const newAccess = resp?.data?.access;
-        if (!newAccess) throw new Error("No access in refresh response");
+        if (!newAccess) throw new Error("No access token in refresh response");
 
-        saveTokens({ access: newAccess });
-        // reintenta petición original con nuevo token
+        setTokens({ access: newAccess, refresh });
+
         original.headers.Authorization = `Bearer ${newAccess}`;
         return api.request(original);
       } catch (e) {
-        refreshing = null;
-        clearTokens();
+        refreshingPromise = null;
+        logout();
         return Promise.reject(e);
       }
     }
@@ -77,27 +82,48 @@ api.interceptors.response.use(
 // ------------ endpoints ------------
 
 // auth
-export function register(payload) { return api.post("/auth/register/", payload); }
-export const registerUser = register; // ← alias para compatibilidad
-export function login(email, password) { return api.post("/auth/login/", { email, password }); }
-export function me() { return api.get("/auth/me/"); }
+export function register(payload) {
+  return api.post("/auth/register/", payload);
+}
+export const registerUser = register;
+export function me() {
+  return api.get("/auth/me/");
+}
+export const getUserProfile = me;
 
 // clientes/mascotas
-export function getClientes(params) { return api.get("/clientes/", { params }); }
-export function getMascotas(params) { return api.get("/mascotas/", { params }); }
+export function getClientes(params) {
+  return api.get("/clientes/", { params });
+}
+export function getMascotas(params) {
+  return api.get("/mascotas/", { params });
+}
+export function crearMascota(payload) {
+  return api.post("/mascotas/", payload);
+}
 
 // citas
-export function getCitas(params) { return api.get("/citas/", { params }); }
-export function crearCita(payload) { return api.post("/citas/", payload); }
-export function confirmarCita(id) { return api.patch(`/citas/${id}/confirmar/`); }
-export function cancelarCita(id) { return api.patch(`/citas/${id}/cancelar/`); }
+export function getCitas(params) {
+  return api.get("/citas/", { params });
+}
+export function crearCita(payload) {
+  return api.post("/citas/", payload);
+}
+export function confirmarCita(id) {
+  return api.patch(`/citas/${id}/confirmar/`);
+}
+export function cancelarCita(id) {
+  return api.patch(`/citas/${id}/cancelar/`);
+}
 
 // agenda
-export function getVeterinarios() { return api.get("/veterinarios/"); }
+export function getVeterinarios() {
+  return api.get("/veterinarios/");
+}
 export function getDisponibilidad({ veterinario_id, fecha, duracion, box }) {
-  return api.get("/agenda/disponibilidad/", { params: { veterinario_id, fecha, duracion, box } });
+  return api.get("/agenda/disponibilidad/", {
+    params: { veterinario_id, fecha, duracion, box },
+  });
 }
 
 export default api;
-export const getUserProfile = me;
-

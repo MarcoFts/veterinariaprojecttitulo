@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { setTokens, logout } from "../../auth"; // ajusta ruta si auth.js está en otro lado
+import api from "../../services/api"; // si tu api.js exporta axios instance default
+// Si NO tienes ese api, más abajo te dejo versión con fetch
 
 export default function VeterinarioLogin() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({
@@ -15,21 +17,58 @@ export default function VeterinarioLogin() {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
 
-    // 🔒 FUTURO LOGIN REAL CON BACKEND
-    /*
-    const response = await api.loginVeterinario(form.email, form.password);
-    if (response.ok) {
-      navigate("/veterinario/home");
-    } else {
-      setError("Credenciales incorrectas");
+    try {
+      // 1) Login real
+      const res = await api.post("/auth/login/", {
+        email: form.email,
+        password: form.password,
+      });
+
+      const data = res.data;
+      if (!data?.access) {
+        setError("No se recibió token. Revisa credenciales.");
+        setLoading(false);
+        return;
+      }
+
+      // 2) Guardar tokens
+      setTokens({ access: data.access, refresh: data.refresh });
+
+      // 3) Traer usuario para validar rol
+      const meRes = await api.get("/auth/me/");
+      const me = meRes.data;
+
+      // Ajusta esta validación según tu backend:
+      const esVeterinario =
+        me?.is_veterinario === true ||
+        me?.rol === "veterinario" ||
+        me?.tipo === "veterinario" ||
+        me?.is_staff === true;
+
+      if (!esVeterinario) {
+        logout();
+        setError("Esta cuenta no tiene permiso de veterinario.");
+        setLoading(false);
+        return;
+      }
+
+      // 4) Redirigir
+      navigate("/veterinario/home", { replace: true });
+    } catch (err) {
+      // Errores típicos DRF
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        "Credenciales incorrectas.";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-    */
-
-    // 👉 NAVEGACIÓN TEMPORAL (solo frontend)
-    navigate("/veterinario/home");
   };
 
   return (
@@ -48,14 +87,18 @@ export default function VeterinarioLogin() {
           </p>
         </div>
 
+        {/* ERROR */}
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
         {/* FORMULARIO */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* EMAIL */}
           <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
               Correo institucional
             </label>
             <input
@@ -67,16 +110,13 @@ export default function VeterinarioLogin() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
               focus:outline-none focus:ring-2 focus:ring-blue-600"
               placeholder="veterinario@clinica.cl"
-              // required  ← se activará cuando el backend esté listo
+              required
             />
           </div>
 
           {/* PASSWORD */}
           <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
               Contraseña
             </label>
             <input
@@ -88,17 +128,18 @@ export default function VeterinarioLogin() {
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
               focus:outline-none focus:ring-2 focus:ring-blue-600"
               placeholder="••••••••"
-              // required  ← se activará cuando el backend esté listo
+              required
             />
           </div>
 
           {/* BOTÓN */}
           <button
             type="submit"
+            disabled={loading}
             className="w-full mt-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 text-white 
-            text-sm font-semibold py-2.5 shadow-md hover:shadow-lg hover:opacity-95 transition"
+            text-sm font-semibold py-2.5 shadow-md hover:shadow-lg hover:opacity-95 transition disabled:opacity-60"
           >
-            Iniciar sesión
+            {loading ? "Ingresando..." : "Iniciar sesión"}
           </button>
         </form>
 
@@ -114,11 +155,6 @@ export default function VeterinarioLogin() {
             </Link>
           </p>
         </div>
-
-        <p className="mt-3 text-[11px] text-slate-400 text-center">
-          *Este formulario por ahora solo maneja navegación en frontend. La
-          autenticación real se conectará al backend en el futuro.*
-        </p>
       </div>
     </div>
   );
