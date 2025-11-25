@@ -3,8 +3,17 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.contrib.auth.models import User
+from .models import Cliente
 
 User = get_user_model()
+
+@receiver(post_save, sender=User)
+def crear_cliente_automaticamente(sender, instance, created, **kwargs):
+    if created:
+        Cliente.objects.get_or_create(user=instance)
 
 @receiver(post_migrate)
 def ensure_default_groups(sender, **kwargs):
