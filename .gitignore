@@ -22,6 +22,7 @@ __pycache__/
 env/
 .venv/
 backend/env/
+backend/venv/
 backend/.venv/
 
 # Base de datos local
