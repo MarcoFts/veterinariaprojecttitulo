@@ -14,11 +14,13 @@ import RegistrarMascotas from "./pages/mascotas/RegistrarMascotas";
 
 // Veterinario
 import VetHome from "./pages/veterinario/VetHome";
+import VetAgenda from "./pages/veterinario/VetAgenda";
+import VetMascotas from "./pages/veterinario/VetMascotas"; // ← NUEVO
+import VetCitas from "./pages/veterinario/VetCitas";
 
 function App() {
   return (
     <Routes>
-
       {/* Root → selección */}
       <Route path="/" element={<Navigate to="/seleccion-login" replace />} />
 
@@ -27,15 +29,11 @@ function App() {
 
       {/* Registro */}
       <Route path="/registro" element={<Registro />} />
-
-      {/* Pantalla profesional post-registro */}
       <Route path="/cuenta-creada" element={<CuentaCreada />} />
 
       {/* Logins */}
       <Route path="/login/cliente" element={<ClienteLogin />} />
       <Route path="/login/veterinario" element={<VeterinarioLogin />} />
-      <Route path="/registro" element={<Registro />} />
-
 
       {/* Cliente */}
       <Route path="/cliente/home" element={<ClienteHome />} />
@@ -44,10 +42,12 @@ function App() {
 
       {/* Veterinario */}
       <Route path="/veterinario/home" element={<VetHome />} />
+      <Route path="/veterinario/agenda" element={<VetAgenda />} />
+      <Route path="/veterinario/mascotas" element={<VetMascotas />} /> {/* ← CORRECTO */}
+      <Route path="/veterinario/citas" element={<VetCitas />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/seleccion-login" replace />} />
-
     </Routes>
   );
 }

@@ -14,7 +14,7 @@ import { logout } from "../../auth"; // ajusta ruta si auth.js está en otro lad
 const sections = [
   { id: "home", label: "Inicio", description: "Resumen general", icon: Home },
   { id: "agenda", label: "Agenda", description: "Disponibilidad y horas", icon: CalendarDays },
-  { id: "pacientes", label: "Mascotas", description: "Mascotas y dueños", icon: PawPrint },
+  { id: "mascotas", label: "Mascotas", description: "Mascotas y dueños", icon: PawPrint }, // ← CORREGIDO
   { id: "citas", label: "Citas", description: "Historial de reservas", icon: ClipboardList },
   { id: "config", label: "Preferencias", description: "Datos y ajustes", icon: Settings },
 ];
