@@ -10,8 +10,6 @@ class Cliente(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="cliente",
-        null=True,   # temporal para no romper datos viejos
-        blank=True,
     )
     telefono = models.CharField(max_length=30, blank=True)
     direccion = models.CharField("Dirección", max_length=255, default="", blank=True)
@@ -31,13 +29,28 @@ class Mascota(models.Model):
         ("Hembra", "Hembra"),
         ("No informado", "No informado"),
     )
-    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="mascotas")
+
+    cliente = models.ForeignKey(
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name="mascotas",
+    )
     nombre = models.CharField(max_length=100)
     especie = models.CharField(max_length=20)
-    sexo = models.CharField("Sexo", max_length=20, choices=SEXO_CHOICES, default="No informado")
+    sexo = models.CharField(
+        "Sexo",
+        max_length=20,
+        choices=SEXO_CHOICES,
+        default="No informado",
+    )
     raza = models.CharField("Raza", max_length=100, null=True, blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
-    peso_kg = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    peso_kg = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
     esterilizado = models.BooleanField(default=False)
     microchip = models.CharField("Microchip", max_length=50, null=True, blank=True)
     notas_salud = models.TextField(blank=True)
@@ -51,21 +64,61 @@ class Cita(models.Model):
         ("pendiente", "Pendiente"),
         ("confirmada", "Confirmada"),
         ("cancelada", "Cancelada"),
+        ("no_asistida", "No asistió"),
+        ("atendida", "Atendida"),
     )
+
     cliente = models.ForeignKey(
-        Cliente, on_delete=models.CASCADE, related_name="citas",
-        null=True, blank=True
+        Cliente,
+        on_delete=models.CASCADE,
+        related_name="citas",
+        null=True,
+        blank=True,
     )
-    mascota = models.ForeignKey(Mascota, on_delete=models.SET_NULL, null=True, blank=True)
-    veterinario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="citas_asignadas")
+    mascota = models.ForeignKey(
+        Mascota,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="citas",
+    )
+    veterinario = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="citas_asignadas",
+    )
     box = models.CharField(max_length=20, blank=True, default="BOX-1")
-    inicio = models.DateTimeField(null=True, blank=True)
-    fin = models.DateTimeField(null=True, blank=True)
-    estado = models.CharField(max_length=10, choices=ESTADOS, default="pendiente")
+
+    inicio = models.DateTimeField()
+    fin = models.DateTimeField()
+
+    estado = models.CharField(
+        max_length=15,
+        choices=ESTADOS,
+        default="pendiente",
+    )
     motivo = models.CharField(max_length=255, blank=True, default="")
 
+    creada_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="citas_creadas",
+        help_text="Usuario (cliente/admin) que registró la cita",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
-        indexes = [models.Index(fields=["veterinario", "box", "inicio", "fin", "estado"])]
+        indexes = [
+            models.Index(
+                fields=["veterinario", "box", "inicio", "fin", "estado"],
+            ),
+        ]
 
     def __str__(self):
         if self.inicio:
@@ -86,15 +139,25 @@ class Producto(models.Model):
     def en_alerta_vencimiento(self, dias=30):
         if not self.fecha_vencimiento:
             return False
-        return self.fecha_vencimiento <= (timezone.now().date() + timedelta(days=dias))
+        return self.fecha_vencimiento <= (
+            timezone.now().date() + timedelta(days=dias)
+        )
 
     def __str__(self):
         return f"{self.nombre} ({self.codigo})"
 
 
 class MovimientoInventario(models.Model):
-    TIPO = (("ingreso", "Ingreso"), ("salida", "Salida"))
-    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name="movimientos")
+    TIPO = (
+        ("ingreso", "Ingreso"),
+        ("salida", "Salida"),
+    )
+
+    producto = models.ForeignKey(
+        Producto,
+        on_delete=models.CASCADE,
+        related_name="movimientos",
+    )
     tipo = models.CharField(max_length=10, choices=TIPO)
     cantidad = models.IntegerField()
     motivo = models.CharField(max_length=255, blank=True, default="")
@@ -112,16 +175,31 @@ class MovimientoInventario(models.Model):
 
     def __str__(self):
         signo = "+" if self.tipo == "ingreso" else "-"
-        return f"{self.producto.codigo} {signo}{self.cantidad} @ {self.fecha:%Y-%m-%d %H:%M}"
+        return (
+            f"{self.producto.codigo} {signo}{self.cantidad} "
+            f"@ {self.fecha:%Y-%m-%d %H:%M}"
+        )
+
 
 # ---- Agenda ----
+
 class HorarioAtencion(models.Model):
     """Horario de atención recurrente por día de semana."""
-    DIAS = [(i, d) for i, d in enumerate(
-        ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-    )]
-    veterinario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="horarios")
-    dia_semana = models.IntegerField(choices=DIAS)  # 0 = Lunes ... 6 = Domingo
+    DIAS = [
+        (i, d)
+        for i, d in enumerate(
+            ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+        )
+    ]
+
+    veterinario = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="horarios",
+    )
+    dia_semana = models.IntegerField(
+        choices=DIAS
+    )  # 0 = Lunes ... 6 = Domingo
     inicio = models.TimeField()
     fin = models.TimeField()
     box = models.CharField(max_length=20, blank=True, default="")
@@ -132,38 +210,28 @@ class HorarioAtencion(models.Model):
 
     def __str__(self):
         box = f" [{self.box}]" if self.box else ""
-        return f"{self.get_dia_semana_display()} {self.inicio}-{self.fin}{box} ({self.veterinario})"
+        return (
+            f"{self.get_dia_semana_display()} {self.inicio}-{self.fin}"
+            f"{box} ({self.veterinario})"
+        )
 
 
 class BloqueoAgenda(models.Model):
-    """Bloqueo puntual (reunión, feriado personal, etc.)."""
-    veterinario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bloqueos")
+    """Bloqueo puntual (reunión, feriado, vacaciones, etc.)."""
+
+    veterinario = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="bloqueos",
+    )
     inicio = models.DateTimeField()
     fin = models.DateTimeField()
     motivo = models.CharField(max_length=255, blank=True, default="")
     box = models.CharField(max_length=20, blank=True, default="")
-
-    class Meta:
-        indexes = [models.Index(fields=["veterinario", "inicio", "fin"])]
 
     def __str__(self):
         box = f" [{self.box}]" if self.box else ""
-        return f"Bloqueo {self.inicio:%Y-%m-%d %H:%M}-{self.fin:%H:%M}{box} ({self.veterinario})"
-class HorarioAtencion(models.Model):
-    veterinario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="horarios")
-    dia_semana = models.IntegerField(choices=[(0,"Lun"),(1,"Mar"),(2,"Mié"),(3,"Jue"),(4,"Vie"),(5,"Sáb"),(6,"Dom")])
-    inicio = models.TimeField()
-    fin = models.TimeField()
-    box = models.CharField(max_length=20, blank=True, default="")
-
-    class Meta:
-        unique_together = ("veterinario", "dia_semana", "inicio", "fin", "box")
-        ordering = ["veterinario_id", "dia_semana", "inicio"]
-
-class BloqueoAgenda(models.Model):
-    veterinario = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bloqueos")
-    inicio = models.DateTimeField()
-    fin = models.DateTimeField()
-    motivo = models.CharField(max_length=255, blank=True, default="")
-    box = models.CharField(max_length=20, blank=True, default="")
-
+        return (
+            f"Bloqueo {self.inicio:%Y-%m-%d %H:%M}-"
+            f"{self.fin:%H:%M}{box} ({self.veterinario})"
+        )

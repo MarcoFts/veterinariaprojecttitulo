@@ -11,11 +11,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
-
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .auth_serializers import EmailTokenObtainPairSerializer
+from .models import Cliente
 
 
 User = get_user_model()
-
+class EmailTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailTokenObtainPairSerializer
 # -----------------------------
 # LOGIN
 # -----------------------------
@@ -87,6 +90,9 @@ class RegisterView(APIView):
             print(">>> Error al crear usuario:", e)
             return Response({"detail": str(e)}, status=400)
 
+        # 👇 CREA AUTOMÁTICAMENTE LA FICHA CLIENTE
+        Cliente.objects.get_or_create(user=user)
+
         # -----------------------------
         # Enviar correo de bienvenida HTML
         # -----------------------------
@@ -109,9 +115,10 @@ class RegisterView(APIView):
             print("⚠️ Error enviando correo HTML:", e)
 
         return Response(
-            {"detail": "Usuario creado correctamente y correo HTML enviado."},
+            {"detail": "Usuario creado correctamente, ficha de cliente creada y correo HTML enviado."},
             status=201,
         )
+
 
 
 

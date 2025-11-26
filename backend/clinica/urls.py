@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
-
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from clinica.auth_views import EmailTokenObtainPairView
 # Vistas existentes
 from .views import (
     disponibilidad,
@@ -9,8 +9,12 @@ from .views import (
     ClienteViewSet,
     MascotaViewSet,
     CitaViewSet,
+    HorarioAtencionViewSet,
+    BloqueoAgendaViewSet,   
     ProductoViewSet,
     InventarioViewSet,
+    veterinarios,
+    disponibilidad,
     me,
 )
 
@@ -31,6 +35,8 @@ router.register(r"mascotas", MascotaViewSet, basename="mascota")
 router.register(r"citas", CitaViewSet, basename="cita")
 router.register(r"productos", ProductoViewSet, basename="producto")
 router.register(r"inventario", InventarioViewSet, basename="inventario")
+router.register(r"horarios", HorarioAtencionViewSet, basename="horario")      # 👈
+router.register(r"bloqueos", BloqueoAgendaViewSet, basename="bloqueo")        # 👈
 
 # -----------------------------
 # URLS PRINCIPALES
@@ -41,7 +47,7 @@ urlpatterns = [
 
     # Autenticación y JWT
     path("api/auth/register/", RegisterView.as_view(), name="register"),
-    path("api/auth/login/", LoginView.as_view(), name="email_login"),
+    path("api/auth/login/", EmailTokenObtainPairView.as_view(), name="login_email"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="me"),
 
