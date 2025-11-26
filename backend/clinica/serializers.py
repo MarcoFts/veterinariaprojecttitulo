@@ -145,9 +145,21 @@ class RegisterSerializer(serializers.Serializer):
 # ---------- Citas ----------
 
 class CitaSerializer(serializers.ModelSerializer):
+    veterinario_nombre = serializers.SerializerMethodField()
+    mascota_nombre = serializers.SerializerMethodField()
+
     class Meta:
         model = Cita
         fields = "__all__"
+
+    def get_veterinario_nombre(self, obj):
+        if obj.veterinario:
+            full = f"{obj.veterinario.first_name} {obj.veterinario.last_name}".strip()
+            return full or obj.veterinario.email or obj.veterinario.username
+        return ""
+
+    def get_mascota_nombre(self, obj):
+        return obj.mascota.nombre if obj.mascota else ""
 
     def validate(self, data):
         """

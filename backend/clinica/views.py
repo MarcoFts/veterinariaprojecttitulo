@@ -1,17 +1,18 @@
 from datetime import datetime, timedelta, time
+
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.utils.dateparse import parse_date
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+
 from rest_framework import viewsets, status, mixins, serializers as drf_serializers
-from rest_framework import viewsets, status, mixins
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
+
 from .models import Cliente, Mascota, Cita, Producto, HorarioAtencion, BloqueoAgenda
 from .serializers import (
     ClienteSerializer,
@@ -29,12 +30,20 @@ from .utils import user_display_name
 User = get_user_model()
 
 
+# ---------- HELPERS DE ROL ----------
 def user_is_vet(user):
-    """True si es veterinario (grupo 'veterinarios') o staff/admin."""
-    return bool(
-        getattr(user, "is_staff", False)
-        or user.groups.filter(name__iexact="veterinarios").exists()
-    )
+    """Retorna True si el usuario es veterinario (campo o grupo)."""
+    return getattr(user, "es_veterinario", False) or user.groups.filter(
+        name="veterinarios"
+    ).exists()
+
+
+def user_is_client(user):
+    """
+    Retorna True si el usuario tiene ficha Cliente asociada.
+    Asume que Cliente tiene OneToOneField(user, related_name='cliente').
+    """
+    return hasattr(user, "cliente")
 
 
 # ---------- CLIENTES ----------
@@ -45,8 +54,12 @@ class ClienteViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Cliente.objects.all().order_by("-id")
         u = self.request.user
-        if user_is_vet(u):
+
+        # Veterinario/Admin ve todos los clientes
+        if user_is_vet(u) or u.is_staff or u.is_superuser:
             return qs
+
+        # Cliente solo ve su propia ficha
         return qs.filter(user=u)
 
 
@@ -58,15 +71,19 @@ class MascotaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Mascota.objects.all().order_by("-id")
         u = self.request.user
-        if user_is_vet(u):
+
+        # Veterinario/Admin ve todas las mascotas
+        if user_is_vet(u) or u.is_staff or u.is_superuser:
             return qs
+
+        # Cliente: solo mascotas de su ficha
         return qs.filter(cliente__user=u)
 
     def perform_create(self, serializer):
         u = self.request.user
 
-        # vet/admin exige cliente_id
-        if user_is_vet(u) or u.is_staff:
+        # Vet/admin exige cliente_id explícito
+        if user_is_vet(u) or u.is_staff or u.is_superuser:
             cliente_id = self.request.data.get("cliente_id")
             if not cliente_id:
                 raise drf_serializers.ValidationError(
@@ -76,24 +93,31 @@ class MascotaViewSet(viewsets.ModelViewSet):
             serializer.save(cliente=cliente)
             return
 
-        # cliente normal: buscar su ficha
+        # Cliente normal: buscar su ficha
         cliente = Cliente.objects.filter(user=u).first()
         if not cliente:
             raise drf_serializers.ValidationError(
-                {"detail": "Tu usuario no tiene ficha de cliente. Regístrate como cliente o crea la ficha en admin."}
+                {
+                    "detail": (
+                        "Tu usuario no tiene ficha de cliente. "
+                        "Regístrate como cliente o crea la ficha en admin."
+                    )
+                }
             )
 
         serializer.save(cliente=cliente)
 
+
 # ---------- HORARIOS DE ATENCIÓN ----------
 class HorarioAtencionViewSet(viewsets.ModelViewSet):
     """
-    Permite gestionar los horarios de atención.
+    Gestiona horarios de atención.
 
     - Admin (is_staff): ve y gestiona todos los horarios.
     - Veterinario: ve y gestiona SOLO sus propios horarios.
     - Cliente: no puede ver ni modificar.
     """
+
     queryset = HorarioAtencion.objects.all()
     serializer_class = HorarioAtencionSerializer
     permission_classes = [IsAuthenticated]
@@ -103,7 +127,7 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
         u = self.request.user
 
         # Admin ve todos
-        if u.is_staff:
+        if u.is_staff or u.is_superuser:
             return qs.order_by("veterinario_id", "dia_semana", "inicio")
 
         # Veterinario ve solo los suyos
@@ -116,7 +140,7 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         u = self.request.user
 
-        # Si es veterinario (grupo veterinarios o staff), auto-asignar siempre
+        # Solo veterinario/admin
         if user_is_vet(u):
             serializer.save(veterinario=u)
             return
@@ -127,33 +151,31 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
         u = self.request.user
         instance = self.get_object()
 
-        if not u.is_staff and instance.veterinario != u:
-            raise PermissionDenied(
-                "No puedes modificar horarios de otro veterinario."
-            )
+        if not (u.is_staff or u.is_superuser) and instance.veterinario != u:
+            raise PermissionDenied("No puedes modificar horarios de otro veterinario.")
 
-        if user_is_vet(u) and not u.is_staff:
+        if user_is_vet(u) and not (u.is_staff or u.is_superuser):
             serializer.save(veterinario=u)
         else:
             serializer.save()
 
     def perform_destroy(self, instance):
         u = self.request.user
-        if not u.is_staff and instance.veterinario != u:
-            raise PermissionDenied(
-                "No puedes eliminar horarios de otro veterinario."
-            )
+        if not (u.is_staff or u.is_superuser) and instance.veterinario != u:
+            raise PermissionDenied("No puedes eliminar horarios de otro veterinario.")
         instance.delete()
+
 
 # ---------- BLOQUEOS DE AGENDA ----------
 class BloqueoAgendaViewSet(viewsets.ModelViewSet):
     """
-    Permite gestionar bloqueos de agenda (vacaciones, reuniones, etc.).
+    Gestiona bloqueos de agenda (vacaciones, reuniones, etc.).
 
     - Admin (is_staff): ve y gestiona todos los bloqueos.
     - Veterinario: ve y gestiona SOLO sus propios bloqueos.
     - Cliente: no puede ver ni modificar.
     """
+
     queryset = BloqueoAgenda.objects.all()
     serializer_class = BloqueoAgendaSerializer
     permission_classes = [IsAuthenticated]
@@ -162,7 +184,7 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         u = self.request.user
 
-        if u.is_staff:
+        if u.is_staff or u.is_superuser:
             return qs.order_by("veterinario_id", "inicio")
 
         if user_is_vet(u):
@@ -173,9 +195,9 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         u = self.request.user
 
-        if user_is_vet(u) and not u.is_staff:
+        if user_is_vet(u) and not (u.is_staff or u.is_superuser):
             serializer.save(veterinario=u)
-        elif u.is_staff:
+        elif u.is_staff or u.is_superuser:
             serializer.save()
         else:
             raise PermissionDenied("No tienes permiso para crear bloqueos.")
@@ -184,23 +206,20 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
         u = self.request.user
         instance = self.get_object()
 
-        if not u.is_staff and instance.veterinario != u:
-            raise PermissionDenied(
-                "No puedes modificar bloqueos de otro veterinario."
-            )
+        if not (u.is_staff or u.is_superuser) and instance.veterinario != u:
+            raise PermissionDenied("No puedes modificar bloqueos de otro veterinario.")
 
-        if user_is_vet(u) and not u.is_staff:
+        if user_is_vet(u) and not (u.is_staff or u.is_superuser):
             serializer.save(veterinario=u)
         else:
             serializer.save()
 
     def perform_destroy(self, instance):
         u = self.request.user
-        if not u.is_staff and instance.veterinario != u:
-            raise PermissionDenied(
-                "No puedes eliminar bloqueos de otro veterinario."
-            )
+        if not (u.is_staff or u.is_superuser) and instance.veterinario != u:
+            raise PermissionDenied("No puedes eliminar bloqueos de otro veterinario.")
         instance.delete()
+
 
 # ---------- CITAS ----------
 class CitaViewSet(viewsets.ModelViewSet):
@@ -208,8 +227,9 @@ class CitaViewSet(viewsets.ModelViewSet):
     Citas (horas agendadas).
 
     Visibilidad:
-      - Admin / veterinario: todas las citas.
-      - Cliente: solo sus citas.
+      - Admin / staff: todas las citas.
+      - Veterinario: solo sus citas.
+      - Cliente: solo sus citas (por su ficha Cliente).
 
     Creación:
       - Vet/admin: puede crear para cualquier cliente/mascota.
@@ -221,62 +241,80 @@ class CitaViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = self.queryset
-        u = self.request.user
+        user = self.request.user
+        qs = super().get_queryset()
 
-        # Filtros query params: ?fecha=YYYY-MM-DD&estado=confirmada
-        fecha = self.request.query_params.get("fecha")
-        estado = self.request.query_params.get("estado")
+        if not user.is_authenticated:
+            return qs.none()
 
-        if fecha:
-            d = parse_date(fecha)
-            if d:
-                qs = qs.filter(inicio__date=d)
-        if estado:
-            qs = qs.filter(estado=estado)
-
-        # Vet/admin ve todo
-        if user_is_vet(u):
-            return qs.order_by("inicio")
-
+        # Admin/staff ve todo
+        if user.is_superuser or user.is_staff:
+            base_qs = qs
+        # Veterinario: solo sus citas
+        elif user_is_vet(user):
+            base_qs = qs.filter(veterinario=user)
         # Cliente: solo sus citas
-        cliente = getattr(u, "cliente", None)
-        if cliente:
-            return qs.filter(cliente=cliente).order_by("inicio")
+        elif user_is_client(user):
+            base_qs = qs.filter(cliente__user=user)
+        else:
+            base_qs = qs.none()
 
-        # Otro tipo: nada
-        return qs.none()
+        # Filtro opcional por fecha (?fecha=YYYY-MM-DD)
+        fecha_str = self.request.query_params.get("fecha")
+        if fecha_str:
+            try:
+                fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+                base_qs = base_qs.filter(inicio__date=fecha)
+            except ValueError:
+                # si viene mal la fecha, no filtramos
+                pass
+
+        return base_qs.order_by("inicio")
 
     def perform_create(self, serializer):
+        """
+        - Para vet/admin: crea libremente (se espera cliente/mascota en el payload).
+        - Para cliente: fuerza que la cita quede asociada a su Cliente y a una mascota suya.
+        """
         u = self.request.user
-        data = serializer.validated_data
 
-        # Vet/admin: puede crear libremente
-        if user_is_vet(u):
+        # Vet/Admin: crea sin restricción de cliente/mascota (pero registra quién la creó)
+        if user_is_vet(u) or u.is_staff or u.is_superuser:
             serializer.save(creada_por=u)
             return
 
         # Cliente: debe tener ficha Cliente
+        if not user_is_client(u):
+            raise PermissionDenied("Tu usuario no tiene ficha de cliente.")
+
         cliente = getattr(u, "cliente", None)
         if not cliente:
             raise PermissionDenied("Tu usuario no tiene ficha de cliente.")
 
-        # La mascota debe ser suya
+        data = serializer.validated_data
         mascota = data.get("mascota")
-        if mascota and mascota.cliente_id != cliente.id:
+
+        if not mascota:
+            raise drf_serializers.ValidationError(
+                {"mascota": "Debes seleccionar una mascota."}
+            )
+
+        # La mascota debe pertenecer a este cliente
+        if mascota.cliente_id != cliente.id:
             raise PermissionDenied("No puedes agendar con una mascota que no es tuya.")
 
         serializer.save(cliente=cliente, creada_por=u)
 
+    # ---------- ACCIONES SOBRE CITAS ----------
     @action(detail=True, methods=["patch"])
     def confirmar(self, request, pk=None):
         cita = self.get_object()
         u = request.user
 
-        if not user_is_vet(u):
+        # Solo vet/admin o cliente dueño
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
             if not cita.cliente or cita.cliente.user_id != u.id:
                 return Response({"detail": "No autorizado."}, status=403)
-
 
         if cita.estado == "cancelada":
             return Response(
@@ -293,7 +331,8 @@ class CitaViewSet(viewsets.ModelViewSet):
         cita = self.get_object()
         u = request.user
 
-        if not user_is_vet(u):
+        # Solo vet/admin o cliente dueño
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
             if not cita.cliente or cita.cliente.user_id != u.id:
                 return Response({"detail": "No autorizado."}, status=403)
 
@@ -313,7 +352,7 @@ class CitaViewSet(viewsets.ModelViewSet):
         cita = self.get_object()
         u = request.user
 
-        if not user_is_vet(u):
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
             return Response({"detail": "No autorizado."}, status=403)
 
         if cita.estado == "cancelada":
@@ -327,12 +366,137 @@ class CitaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
+    def reprogramar(self, request, pk=None):
+        """
+        Reprograma una cita a un nuevo horario.
+
+        Espera en el body (JSON):
+        {
+          "inicio": "2025-11-26T10:00",   // nuevo inicio (ISO)
+          "duracion": 30,                 // opcional, en minutos
+          "box": "BOX-1"                  // opcional
+        }
+        """
+        cita = self.get_object()
+        u = request.user
+
+        # Permisos: vet/admin o cliente dueño de la cita
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            if not cita.cliente or cita.cliente.user_id != u.id:
+                return Response({"detail": "No autorizado."}, status=403)
+
+        # Datos de entrada
+        inicio_str = request.data.get("inicio")
+        duracion = request.data.get("duracion")
+        nuevo_box = request.data.get("box") or cita.box
+
+        if not inicio_str:
+            return Response(
+                {"detail": "Debes enviar 'inicio' en formato ISO."},
+                status=400,
+            )
+
+        # Parsear fecha/hora
+        try:
+            nuevo_inicio = datetime.fromisoformat(inicio_str)
+        except ValueError:
+            return Response(
+                {"detail": "Formato de 'inicio' inválido."},
+                status=400,
+            )
+
+        # Asegurar que sea aware con la zona del proyecto
+        if timezone.is_naive(nuevo_inicio):
+            nuevo_inicio = timezone.make_aware(
+                nuevo_inicio, timezone.get_current_timezone()
+            )
+        else:
+            nuevo_inicio = nuevo_inicio.astimezone(timezone.get_current_timezone())
+
+        # Duración: usa la de la cita si no viene en el body
+        if duracion is None:
+            duracion_min = int((cita.fin - cita.inicio).total_seconds() // 60)
+        else:
+            try:
+                duracion_min = int(duracion)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "La duración debe ser un número entero en minutos."},
+                    status=400,
+                )
+
+        nuevo_fin = nuevo_inicio + timedelta(minutes=duracion_min)
+
+        # Validar disponibilidad para ese vet/box
+        vet_id = cita.veterinario_id
+        tz = timezone.get_current_timezone()
+
+        # Citas del mismo día (mismo vet), excluyendo esta cita
+        citas_conflicto = Cita.objects.filter(
+            veterinario_id=vet_id,
+            inicio__date=nuevo_inicio.date(),
+            estado__in=["pendiente", "confirmada"],
+        ).exclude(id=cita.id)
+
+        # Bloqueos de agenda del mismo día
+        bloqueos_conflicto = BloqueoAgenda.objects.filter(
+            veterinario_id=vet_id,
+            inicio__date=nuevo_inicio.date(),
+        )
+
+        def hay_conflicto():
+            from django.utils import timezone as tz_mod
+
+            # Checar contra otras citas
+            for c in citas_conflicto:
+                ci = tz_mod.localtime(c.inicio, tz)
+                cf = tz_mod.localtime(c.fin, tz)
+
+                # Si se usan boxes, respetar
+                if nuevo_box and c.box and nuevo_box != c.box:
+                    continue
+
+                if _overlap(nuevo_inicio, nuevo_fin, ci, cf):
+                    return True
+
+            # Checar contra bloqueos
+            for b in bloqueos_conflicto:
+                bi = tz_mod.localtime(b.inicio, tz)
+                bf = tz_mod.localtime(b.fin, tz)
+
+                if nuevo_box and b.box and nuevo_box != b.box:
+                    continue
+
+                if _overlap(nuevo_inicio, nuevo_fin, bi, bf):
+                    return True
+
+            return False
+
+        if hay_conflicto():
+            return Response(
+                {"detail": "El horario seleccionado no está disponible."},
+                status=400,
+            )
+
+        # Aplicar cambios
+        cita.inicio = nuevo_inicio
+        cita.fin = nuevo_fin
+        cita.box = nuevo_box
+        # Si estaba confirmada, la volvemos a pendiente
+        if cita.estado == "confirmada":
+            cita.estado = "pendiente"
+
+        cita.save(update_fields=["inicio", "fin", "box", "estado"])
+
+        return Response(self.get_serializer(cita).data)
+
+    @action(detail=True, methods=["patch"])
     def atender(self, request, pk=None):
         """Marca la cita como 'atendida'. Solo vet/admin."""
         cita = self.get_object()
         u = request.user
 
-        if not user_is_vet(u):
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
             return Response({"detail": "No autorizado."}, status=403)
 
         if cita.estado in ["cancelada", "no_asistida"]:
@@ -481,21 +645,32 @@ def disponibilidad(request):
             return timezone.make_aware(naive, tz)
         return naive.astimezone(tz)
 
-    h_qs = HorarioAtencion.objects.filter(veterinario_id=vet_id, dia_semana=weekday)
+    h_qs = HorarioAtencion.objects.filter(
+        veterinario_id=vet_id, dia_semana=weekday
+    )
     if box:
         h_qs = h_qs.filter(box=box)
 
-    c_qs = Cita.objects.filter(
-        veterinario_id=vet_id, inicio__date=date_obj
-    ).exclude(estado="cancelada")
+    c_qs = (
+        Cita.objects.filter(veterinario_id=vet_id, inicio__date=date_obj)
+        .exclude(estado="cancelada")
+    )
     citas_dia = [
-        (timezone.localtime(c.inicio, tz), timezone.localtime(c.fin, tz), getattr(c, "box", "") or "")
+        (
+            timezone.localtime(c.inicio, tz),
+            timezone.localtime(c.fin, tz),
+            getattr(c, "box", "") or "",
+        )
         for c in c_qs
     ]
 
     b_qs = BloqueoAgenda.objects.filter(veterinario_id=vet_id, inicio__date=date_obj)
     bloques_dia = [
-        (timezone.localtime(b.inicio, tz), timezone.localtime(b.fin, tz), getattr(b, "box", "") or "")
+        (
+            timezone.localtime(b.inicio, tz),
+            timezone.localtime(b.fin, tz),
+            getattr(b, "box", "") or "",
+        )
         for b in b_qs
     ]
 
@@ -512,6 +687,7 @@ def disponibilidad(request):
             t_end = t + need
             conflict = False
 
+            # Conflicto con otras citas
             for ci, cf, cbox in citas_dia:
                 if box and cbox and cbox != box:
                     continue
@@ -519,6 +695,7 @@ def disponibilidad(request):
                     conflict = True
                     break
 
+            # Conflicto con bloqueos
             if not conflict:
                 for bi, bf, bbox in bloques_dia:
                     if box and bbox and bbox != box:

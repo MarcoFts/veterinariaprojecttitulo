@@ -115,6 +115,10 @@ export function confirmarCita(id) {
 export function cancelarCita(id) {
   return api.patch(`/citas/${id}/cancelar/`);
 }
+export function reprogramarCita(id, payload) {
+  // payload: { inicio: "2025-11-26T10:00", duracion: 30, box: "BOX-1" }
+  return api.patch(`/citas/${id}/reprogramar/`, payload);
+}
 
 // agenda
 export function getVeterinarios() {

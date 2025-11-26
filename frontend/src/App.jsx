@@ -37,8 +37,8 @@ function App() {
 
       {/* Cliente */}
       <Route path="/cliente/home" element={<ClienteHome />} />
-      <Route path="/citas" element={<Citas />} />
-      <Route path="/registrar-mascotas" element={<RegistrarMascotas />} />
+      <Route path="/cliente/citas" element={<Citas />} />
+      <Route path="/cliente/mascotas" element={<RegistrarMascotas />} />
 
       {/* Veterinario */}
       <Route path="/veterinario/home" element={<VetHome />} />
