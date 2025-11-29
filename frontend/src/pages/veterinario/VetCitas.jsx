@@ -125,7 +125,7 @@ export default function VetCitas() {
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Veterinario
+              Vetyon · Veterinario
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
               Citas y estadísticas

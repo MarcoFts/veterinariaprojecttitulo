@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Home, CalendarDays, PawPrint, UserCircle2 } from "lucide-react";
-import { logout } from "../../auth"; // <-- ajusta la ruta si tu auth.js está en otro lado
+import { logout } from "../../auth"; // ajusta si tu auth.js está en otra ruta
 
 const navLinks = [
   { label: "Inicio", href: "/cliente/home", icon: Home },
@@ -14,30 +14,30 @@ export default function NavbarCliente() {
   const navigate = useNavigate();
   const [openUserMenu, setOpenUserMenu] = useState(false);
 
-  // Activo si coincide exacto
   const isActive = (href) => location.pathname === href;
 
   const handleLogout = () => {
-    logout();                 // borra access y refresh del localStorage
-    setOpenUserMenu(false);   // cierra el menú
-    navigate("/login", { replace: true }); // redirige al login
+    logout();
+    setOpenUserMenu(false);
+    navigate("/login", { replace: true });
   };
 
   return (
     <header className="sticky top-0 z-40 bg-white/40 backdrop-blur-xl border-b border-white/30 shadow-sm">
       <nav className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
+
         {/* LOGO */}
         <Link to="/cliente/home" className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 flex items-center justify-center shadow-md">
             <span className="text-white text-sm font-bold">VC</span>
           </div>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-slate-900">VetCare</p>
+            <p className="text-sm font-semibold text-slate-900">Vetyon</p>
             <p className="text-xs text-slate-500">Panel Cliente</p>
           </div>
         </Link>
 
-        {/* Navegación Desktop */}
+        {/* NAV DESKTOP */}
         <ul className="hidden md:flex items-center gap-3 text-sm font-medium">
           {navLinks.map((item) => {
             const Icon = item.icon;
@@ -59,9 +59,10 @@ export default function NavbarCliente() {
           })}
         </ul>
 
-        {/* Botón + Usuario */}
+        {/* BOTÓN RESERVAR + USER */}
         <div className="flex items-center gap-3">
-          {/* Reservar hora debe ir a /cliente/citas */}
+
+          {/* RESERVAR HORA */}
           <Link
             to="/cliente/citas"
             className="hidden md:inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-xs md:text-sm font-semibold text-white shadow-md hover:shadow-lg hover:opacity-95 transition"
@@ -69,7 +70,8 @@ export default function NavbarCliente() {
             Reservar hora
           </Link>
 
-          <div className="relative">
+          {/* USER + DROPDOWN */}
+          <div className="relative inline-block">
             <button
               type="button"
               onClick={() => setOpenUserMenu((prev) => !prev)}
@@ -79,27 +81,36 @@ export default function NavbarCliente() {
                 <UserCircle2 size={18} className="text-sky-700" />
               </div>
               <span className="hidden md:inline text-slate-700">
-                Cliente VetCare
+                Cliente Vetyon
               </span>
             </button>
 
             {openUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 rounded-xl border border-slate-100 bg-white/80 backdrop-blur-md shadow-xl text-xs md:text-sm overflow-hidden">
-                <button className="w-full text-left px-3 py-2 hover:bg-white/60 transition">
-                  Mi perfil{" "}
-                  <span className="text-[10px] text-slate-400">(futuro)</span>
-                </button>
+              <div className="absolute right-0 mt-2 w-full rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
+                <div className="py-1">
+                  {/* PERFIL */}
+                  <button
+                    className="w-full flex items-center justify-between px-4 py-2 text-slate-700 text-sm hover:bg-slate-50 transition"
+                  >
+                    Mi perfil
+                    <span className="text-[11px] text-slate-400">(futuro)</span>
+                  </button>
 
-                {/* ✅ LOGOUT REAL */}
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-3 py-2 hover:bg-white/60 transition"
-                >
-                  Cerrar sesión
-                </button>
+                  {/* SEPARADOR */}
+                  <div className="h-px bg-slate-200 my-1" />
+
+                  {/* CERRAR SESIÓN */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-red-600 font-semibold text-sm hover:bg-red-50 transition"
+                  >
+                    Cerrar sesión
+                  </button>
+                </div>
               </div>
             )}
           </div>
+
         </div>
       </nav>
     </header>

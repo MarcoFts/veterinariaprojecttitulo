@@ -27,19 +27,19 @@ export default function SeleccionLogin() {
             </h1>
 
             <h2 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
-              Bienvenido a VetCare
+              Bienvenido a Vetyon
             </h2>
 
             <p className="text-sm md:text-base text-white/85 max-w-md">
               Una plataforma creada para facilitar la gestión diaria tanto a dueños de
-              mascotas como a profesionales veterinarios. VetCare permite administrar
+              mascotas como a profesionales veterinarios. Vetyon permite administrar
               citas, pacientes, historial clínico y la comunicación entre clínica y
               clientes de manera rápida, clara y moderna.
             </p>
           </div>
 
           <div className="relative mt-8 space-y-3 text-sm md:text-base">
-            <p className="font-medium text-white/90">Con VetCare podrás:</p>
+            <p className="font-medium text-white/90">Con Vetyon podrás:</p>
             <ul className="space-y-1 text-white/85">
               <li>• Agendar horas y revisar disponibilidad en tiempo real.</li>
               <li>• Administrar información de pacientes y mascotas.</li>
