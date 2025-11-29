@@ -125,6 +125,46 @@ class Cita(models.Model):
             return f"Cita {self.pk} - {self.inicio:%Y-%m-%d %H:%M} ({self.estado})"
         return f"Cita {self.pk} ({self.estado})"
 
+class RegistroClinico(models.Model):
+    mascota = models.ForeignKey(
+        Mascota,
+        on_delete=models.CASCADE,
+        related_name="registros_clinicos",
+    )
+    veterinario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="registros_clinicos",
+    )
+    cita = models.ForeignKey(
+        "Cita",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="registros_clinicos",
+        help_text="Cita asociada (si aplica)",
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    motivo_consulta = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Motivo principal de la consulta",
+    )
+    diagnostico = models.TextField()
+    procedimientos = models.TextField(blank=True)
+    tratamientos = models.TextField(blank=True)
+    medicamentos = models.TextField(blank=True)
+    evolucion = models.TextField(blank=True)
+    notas = models.TextField(blank=True)
+
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"Registro {self.mascota} - {self.fecha:%Y-%m-%d %H:%M}"
 
 class Producto(models.Model):
     nombre = models.CharField(max_length=150)

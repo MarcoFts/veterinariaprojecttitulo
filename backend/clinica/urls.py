@@ -1,7 +1,8 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from clinica.auth_views import EmailTokenObtainPairView
+
 # Vistas existentes
 from .views import (
     disponibilidad,
@@ -10,17 +11,17 @@ from .views import (
     MascotaViewSet,
     CitaViewSet,
     HorarioAtencionViewSet,
-    BloqueoAgendaViewSet,   
+    BloqueoAgendaViewSet,
     ProductoViewSet,
     InventarioViewSet,
-    veterinarios,
-    disponibilidad,
     me,
+    RegistroClinicoViewSet,
+    motivos_consulta,
 )
 
 # Vistas de autenticación
 from .auth_views import (
-    LoginView,
+    LoginView,          # si no lo usas lo puedes borrar
     RegisterView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
@@ -35,8 +36,9 @@ router.register(r"mascotas", MascotaViewSet, basename="mascota")
 router.register(r"citas", CitaViewSet, basename="cita")
 router.register(r"productos", ProductoViewSet, basename="producto")
 router.register(r"inventario", InventarioViewSet, basename="inventario")
-router.register(r"horarios", HorarioAtencionViewSet, basename="horario")      # 👈
-router.register(r"bloqueos", BloqueoAgendaViewSet, basename="bloqueo")        # 👈
+router.register(r"horarios", HorarioAtencionViewSet, basename="horario")
+router.register(r"bloqueos", BloqueoAgendaViewSet, basename="bloqueo")
+router.register(r"registros-clinicos", RegistroClinicoViewSet, basename="registro-clinico")
 
 # -----------------------------
 # URLS PRINCIPALES
@@ -58,4 +60,6 @@ urlpatterns = [
     # Funcionalidades de agenda y veterinarios
     path("api/agenda/disponibilidad/", disponibilidad, name="agenda-disponibilidad"),
     path("api/veterinarios/", veterinarios, name="veterinarios"),
+     # Motivos de consulta (predefinidos)
+    path("api/motivos-consulta/", motivos_consulta, name="motivos-consulta"),
 ]

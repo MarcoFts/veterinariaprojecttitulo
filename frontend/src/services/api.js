@@ -130,4 +130,19 @@ export function getDisponibilidad({ veterinario_id, fecha, duracion, box }) {
   });
 }
 
+// ficha clínica / registros clínicos
+export function getRegistrosClinicos(params) {
+  return api.get("/registros-clinicos/", { params });
+}
+
+export function crearRegistroClinico(payload) {
+  return api.post("/registros-clinicos/", payload);
+}
+
+// mascota individual (detalle)
+export function getMascota(id) {
+  return api.get(`/mascotas/${id}/`);
+}
+export const getMotivosConsulta = () => api.get("/motivos-consulta/");
+
 export default api;

@@ -1,73 +1,95 @@
+// src/components/modals/ModalAgregarRegistro.jsx
+import { useState } from "react";
 import { X } from "lucide-react";
 
 export default function ModalAgregarRegistro({ open, onClose, onSave }) {
+  const [motivoConsulta, setMotivoConsulta] = useState("");
+  const [diagnostico, setDiagnostico] = useState("");
+  const [error, setError] = useState("");
+
   if (!open) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (!diagnostico.trim()) {
+      setError("El diagnóstico es obligatorio.");
+      return;
+    }
+
+    setError("");
+
+    onSave({
+      motivo_consulta: motivoConsulta,
+      diagnostico,
+      // más adelante aquí puedes sumar:
+      // procedimientos, tratamientos, medicamentos, evolucion, notas...
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl shadow-xl border border-slate-200 w-full max-w-xl animate-fadeIn p-6 relative">
-        
-        {/* Cerrar */}
+      <div className="bg-white rounded-3xl shadow-xl border border-slate-200 w-full max-w-2xl relative">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-500 hover:text-slate-700 transition"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <h2 className="text-xl font-semibold text-slate-900 mb-4">
-          Nuevo registro clínico
-        </h2>
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="text-xl font-semibold text-slate-900">
+            Nuevo registro clínico
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Ingresa el motivo y el diagnóstico de la consulta.
+          </p>
+          {error && (
+            <p className="mt-2 text-xs text-rose-500">
+              {error}
+            </p>
+          )}
+        </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSave?.();
-          }}
-          className="space-y-4"
-        >
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label classname="text-sm font-medium text-slate-700">Diagnóstico</label>
-            <textarea
-              required
-              className="w-full mt-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 outline-none transition"
+            <label className="text-xs font-semibold text-slate-700">
+              Motivo de consulta
+            </label>
+            <input
+              type="text"
+              value={motivoConsulta}
+              onChange={(e) => setMotivoConsulta(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 outline-none"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">Procedimiento</label>
+            <label className="text-xs font-semibold text-slate-700">
+              Diagnóstico <span className="text-rose-500">*</span>
+            </label>
             <textarea
-              className="w-full mt-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 outline-none transition"
+              value={diagnostico}
+              onChange={(e) => setDiagnostico(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 outline-none min-h-[80px]"
             />
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-slate-700">Tratamiento</label>
-            <textarea
-              className="w-full mt-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 outline-none transition"
-            />
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm rounded-xl bg-sky-600 text-white font-semibold hover:bg-sky-700"
+            >
+              Guardar registro
+            </button>
           </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">Medicamentos</label>
-            <textarea
-              className="w-full mt-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 outline-none transition"
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">Observaciones</label>
-            <textarea
-              className="w-full mt-1 p-3 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 outline-none transition"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl transition shadow-md shadow-sky-600/20"
-          >
-            Guardar registro
-          </button>
         </form>
       </div>
     </div>

@@ -1,122 +1,105 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import LayoutVet from "../../components/layout/LayoutVet";
-import { Users2, PawPrint, User2 } from "lucide-react";
+import { UserRound } from "lucide-react";
+import { getMascotas } from "../../services/api";
 
 export default function VetPacientes() {
-  // MOCK TEMPORAL — cuando haya backend se reemplaza con fetch
-  const pacientes = [
-    {
-      id: 1,
-      nombre: "Luna",
-      especie: "Gato",
-      edad: "3 años",
-      dueño: "Juan Pérez",
-    },
-    {
-      id: 2,
-      nombre: "Rocky",
-      especie: "Perro",
-      edad: "5 años",
-      dueño: "María Torres",
-    },
-    {
-      id: 3,
-      nombre: "Nala",
-      especie: "Perro",
-      edad: "2 años",
-      dueño: "Carla Muñoz",
-    },
-  ];
+  const [pacientes, setPacientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPacientes() {
+      try {
+        // Si tu backend filtra por veterinario según el usuario logueado,
+        // no necesitas pasar parámetros.
+        const res = await getMascotas();
+        setPacientes(res.data || []);
+      } catch (error) {
+        console.error("Error cargando pacientes atendidos:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPacientes();
+  }, []);
+
+  const getEdadTexto = (m) => {
+    // Ajusta según lo que te devuelva el backend (edad, fecha_nacimiento, etc.)
+    if (m.edad) return `${m.edad} años`;
+    if (m.edad_aproximada) return `${m.edad_aproximada} años (aprox.)`;
+    return "Edad no registrada";
+  };
+
+  const getDuenoTexto = (m) => {
+    // Ajusta el nombre del campo al de tu serializer
+    if (m.dueno_nombre) return m.dueno_nombre;
+    if (m.cliente_nombre) return m.cliente_nombre;
+    if (m.cliente?.nombre_completo) return m.cliente.nombre_completo;
+    return "Sin datos";
+  };
 
   return (
     <LayoutVet>
       <div className="space-y-8">
-
-        {/* ENCABEZADO */}
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              Vetyon · Veterinario
-            </p>
-
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-              Pacientes atendidos
-            </h1>
-
-            <p className="text-sm text-slate-600 mt-1">
-              Gestiona las mascotas que atiendes y accede a sus fichas clínicas.
-            </p>
-          </div>
+        {/* Encabezado */}
+        <section>
+          <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
+            Vetyon · Veterinario
+          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+            Pacientes atendidos
+          </h1>
+          <p className="text-sm text-slate-600">
+            Gestiona las mascotas que atiendes y accede a sus fichas clínicas.
+          </p>
         </section>
 
-        {/* LISTADO PREMIUM */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {pacientes.map((p) => (
-            <Link
-              key={p.id}
-              to={`/veterinario/paciente/${p.id}`}
-              className="
-                group bg-white rounded-3xl border border-slate-100 
-                p-6 shadow-[0_8px_25px_rgba(15,23,42,0.06)]
-                hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)]
-                hover:border-sky-200
-                transition-all duration-200 cursor-pointer
-                flex flex-col gap-4
-              "
-            >
-              {/* ICONO */}
-              <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner">
-                <PawPrint className="h-6 w-6" />
-              </div>
+        {/* Contenido */}
+        {loading ? (
+          <p className="text-sm text-slate-500">Cargando pacientes...</p>
+        ) : pacientes.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Aún no hay pacientes registrados para este veterinario.
+          </p>
+        ) : (
+          <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {pacientes.map((m) => (
+              <article
+                key={m.id}
+                className="bg-white rounded-3xl p-5 border border-slate-200 shadow-[0_8px_25px_rgba(15,23,42,0.06)] flex flex-col justify-between"
+              >
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
+                    <UserRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-lg text-slate-900">
+                      {m.nombre}
+                    </h2>
+                    <p className="text-sm text-slate-600">
+                      Especie: {m.especie || "No registrada"}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Edad: {getEdadTexto(m)}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Dueño: {getDuenoTexto(m)}
+                    </p>
+                  </div>
+                </div>
 
-              {/* NOMBRE */}
-              <h3 className="text-xl font-semibold text-slate-900 group-hover:text-sky-700 transition">
-                {p.nombre}
-              </h3>
-
-              {/* INFO */}
-              <div className="space-y-1 text-sm text-slate-600">
-                <p>
-                  <span className="font-medium text-slate-800">Especie:</span>{" "}
-                  {p.especie}
-                </p>
-                <p>
-                  <span className="font-medium text-slate-800">Edad:</span>{" "}
-                  {p.edad}
-                </p>
-                <p className="flex items-center gap-1">
-                  <User2 className="h-4 w-4 text-sky-600" />
-                  <span className="font-medium text-slate-800">Dueño:</span>{" "}
-                  {p.dueño}
-                </p>
-              </div>
-
-              {/* BOTÓN VER FICHA */}
-              <div>
-                <span className="inline-block text-sm font-semibold text-sky-600 group-hover:underline">
-                  Ver ficha clínica →
-                </span>
-              </div>
-            </Link>
-          ))}
-        </section>
-
-        {/* SI NO HAY PACIENTES */}
-        {pacientes.length === 0 && (
-          <section className="rounded-3xl bg-white border border-slate-100 shadow-[0_8px_25px_rgba(15,23,42,0.06)] p-6 flex flex-col items-center justify-center text-center">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-3">
-              <Users2 className="h-6 w-6" />
-            </div>
-
-            <h2 className="text-sm font-semibold text-slate-900 mb-1">
-              Aún no hay pacientes registrados
-            </h2>
-
-            <p className="text-sm text-slate-600 max-w-md">
-              Cuando el módulo esté conectado al backend, aquí aparecerán los
-              pacientes asociados a tus consultas y podrás acceder a sus fichas
-              clínicas detalladas.
-            </p>
+                <div>
+                  <Link
+                    to={`/veterinario/paciente/${m.id}`}
+                    className="inline-flex items-center text-sm font-semibold text-sky-600 hover:text-sky-700"
+                  >
+                    Ver ficha clínica →
+                  </Link>
+                </div>
+              </article>
+            ))}
           </section>
         )}
       </div>

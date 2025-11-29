@@ -13,7 +13,15 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Cliente, Mascota, Cita, Producto, HorarioAtencion, BloqueoAgenda
+from .models import (
+    Cliente,
+    Mascota,
+    Cita,
+    Producto,
+    HorarioAtencion,
+    BloqueoAgenda,
+    RegistroClinico,
+)
 from .serializers import (
     ClienteSerializer,
     MascotaSerializer,
@@ -24,6 +32,7 @@ from .serializers import (
     RegisterSerializer,
     HorarioAtencionSerializer,
     BloqueoAgendaSerializer,
+    RegistroClinicoSerializer,
 )
 from .utils import user_display_name
 
@@ -372,9 +381,9 @@ class CitaViewSet(viewsets.ModelViewSet):
 
         Espera en el body (JSON):
         {
-          "inicio": "2025-11-26T10:00",   // nuevo inicio (ISO)
-          "duracion": 30,                 // opcional, en minutos
-          "box": "BOX-1"                  // opcional
+          "inicio": "2025-11-26T10:00",   # nuevo inicio (ISO)
+          "duracion": 30,                 # opcional, en minutos
+          "box": "BOX-1"                  # opcional
         }
         """
         cita = self.get_object()
@@ -710,3 +719,104 @@ def disponibilidad(request):
             t += step
 
     return Response({"slots": slots})
+
+
+# ---------- REGISTROS CLÍNICOS ----------
+class RegistroClinicoViewSet(viewsets.ModelViewSet):
+    queryset = (
+        RegistroClinico.objects
+        .select_related("mascota", "veterinario", "cita")
+        .order_by("-fecha", "-id")
+    )
+    serializer_class = RegistroClinicoSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = self.queryset
+
+        # Filtros por query param
+        mascota_id = self.request.query_params.get("mascota")
+        cita_id = self.request.query_params.get("cita")
+        if mascota_id:
+            qs = qs.filter(mascota_id=mascota_id)
+        if cita_id:
+            qs = qs.filter(cita_id=cita_id)
+
+        # Veterinario / admin ven todo
+        if user.is_staff or user_is_vet(user) or user.is_superuser:
+            return qs
+
+        # Cliente: solo registros de sus mascotas
+        if hasattr(user, "cliente"):
+            return qs.filter(mascota__cliente=user.cliente)
+
+        return qs.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        # Sólo vet / admin
+        if not (user_is_vet(user) or user.is_staff or user.is_superuser):
+            raise PermissionDenied("Solo un veterinario puede crear registros clínicos.")
+
+        mascota_id = self.request.data.get("mascota")
+        if not mascota_id:
+            raise drf_serializers.ValidationError(
+                {"mascota": "Debes enviar el id de la mascota."}
+            )
+
+        mascota = get_object_or_404(Mascota, pk=mascota_id)
+
+        serializer.save(
+            mascota=mascota,
+            veterinario=user,
+            # si el serializer ya trae fecha, respeta; si no, usa ahora
+            fecha=serializer.validated_data.get("fecha", timezone.now()),
+        )
+
+# ---------- MOTIVOS DE CONSULTA (CATEGORÍAS GENERALES) ----------
+
+MOTIVOS_CONSULTA_OPCIONES = [
+    # Controles generales / preventivos
+    {"codigo": "control_general", "nombre": "Control general / chequeo sano"},
+    {"codigo": "control_anual", "nombre": "Control anual de rutina"},
+    {"codigo": "control_postoperatorio", "nombre": "Control postoperatorio"},
+    {"codigo": "control_cronico", "nombre": "Control de enfermedad crónica"},
+
+    # Plan sanitario básico
+    {"codigo": "vacunacion", "nombre": "Vacunación"},
+    {"codigo": "desparasitacion", "nombre": "Desparasitación"},
+    {"codigo": "esterilizacion_castracion", "nombre": "Esterilización / castración"},
+    {"codigo": "certificado_salud", "nombre": "Certificado de salud / viaje"},
+
+    # Síntomas digestivos
+    {"codigo": "problema_digestivo", "nombre": "Problemas digestivos (vómitos, diarrea, falta de apetito)"},
+    # Síntomas respiratorios / cardiacos
+    {"codigo": "problema_respiratorio", "nombre": "Problemas respiratorios (tos, jadeo, dificultad para respirar)"},
+    # Piel / oídos / ojos
+    {"codigo": "problema_piel", "nombre": "Problemas de piel / pelaje"},
+    {"codigo": "problema_oidos", "nombre": "Problemas de oídos"},
+    {"codigo": "problema_ojos", "nombre": "Problemas de ojos"},
+
+    # Locomoción / dolor
+    {"codigo": "problema_locomotor", "nombre": "Problemas para caminar / cojera / dolor articular"},
+    # Urinario / reproductivo
+    {"codigo": "problema_urinario", "nombre": "Problemas urinarios / genitales"},
+
+    # Conducta
+    {"codigo": "problema_conducta", "nombre": "Cambios de conducta / comportamiento"},
+
+    # Urgencias y otros
+    {"codigo": "urgencia", "nombre": "Atención de urgencia"},
+    {"codigo": "asesoria", "nombre": "Asesoría / orientación al tutor"},
+    {"codigo": "otro", "nombre": "Otro motivo"},
+]
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def motivos_consulta(request):
+    """
+    Devuelve la lista de motivos de consulta predefinidos (categorías generales).
+    """
+    return Response(MOTIVOS_CONSULTA_OPCIONES)

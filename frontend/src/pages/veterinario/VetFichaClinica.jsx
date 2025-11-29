@@ -1,29 +1,87 @@
-import { useState } from "react";
+// src/pages/vet/vetfichaclinica.jsx
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import LayoutVet from "../../components/layout/LayoutVet";
 import { Calendar, Plus, MessageSquareHeart } from "lucide-react";
 import ModalAgregarRegistro from "../../components/modals/ModalAgregarRegistro";
+import {
+  getRegistrosClinicos,
+  crearRegistroClinico,
+  getMascota,
+} from "../../services/api";
 
 export default function VetFichaClinica() {
+  const { id } = useParams(); // id de la mascota desde la URL
   const [openModal, setOpenModal] = useState(false);
+  const [registros, setRegistros] = useState([]);
+  const [mascota, setMascota] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // MOCK TIMELINE (cuando haya backend, se reemplaza)
-  const registros = [
-    {
-      fecha: "20 Feb 2025",
-      diagnostico: "Dermatitis alérgica",
-      evolucion: "Paciente estable, sin picazón notable.",
-    },
-    {
-      fecha: "03 Ene 2025",
-      diagnostico: "Control general",
-      evolucion: "Sin hallazgos relevantes.",
-    },
-  ];
+  // Cargar ficha clínica y datos de la mascota
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const [regsRes, mascotaRes] = await Promise.all([
+          getRegistrosClinicos({ mascota: id }),
+          getMascota(id),
+        ]);
+
+        setRegistros(regsRes.data || []);
+        setMascota(mascotaRes.data || null);
+      } catch (error) {
+        console.error("Error cargando ficha clínica:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (id) {
+      fetchData();
+    }
+  }, [id]);
+
+  const handleSaveRegistro = async (payload) => {
+    try {
+      const res = await crearRegistroClinico({
+        mascota: id,
+        ...payload,
+      });
+
+      // Insertamos el nuevo registro al inicio del historial
+      setRegistros((prev) => [res.data, ...prev]);
+      setOpenModal(false);
+    } catch (error) {
+      console.error("Error creando registro clínico:", error);
+    }
+  };
+
+  const nombreMascota = mascota?.nombre || "Mascota";
+  const especie = mascota?.especie || "";
+  const sexo = mascota?.sexo || "";
+  const esterilizado =
+    typeof mascota?.esterilizado === "boolean"
+      ? mascota.esterilizado
+        ? " · Esterilizado/a"
+        : ""
+      : "";
+
+  const formatFecha = (iso) => {
+    if (!iso) return "Sin fecha";
+    try {
+      return new Date(iso).toLocaleDateString("es-CL", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <LayoutVet>
       <div className="space-y-8">
-
         {/* Encabezado */}
         <section className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
           <div>
@@ -31,7 +89,7 @@ export default function VetFichaClinica() {
               Vetyon · Ficha clínica
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-              Ficha clínica de Luna
+              Ficha clínica de {nombreMascota}
             </h1>
             <p className="text-sm text-slate-600">
               Aquí podrás ver el historial clínico de la mascota.
@@ -55,50 +113,108 @@ export default function VetFichaClinica() {
             </div>
 
             <div>
-              <h2 className="font-bold text-lg text-slate-900">Luna</h2>
-              <p className="text-sm text-slate-600">Gata · 3 años · Esterilizada</p>
-              <p className="text-sm text-slate-600">Dueño: Juan Pérez</p>
+              <h2 className="font-bold text-lg text-slate-900">
+                {nombreMascota}
+              </h2>
+              <p className="text-sm text-slate-600">
+                {[especie, sexo, esterilizado].filter(Boolean).join(" · ") ||
+                  "Datos clínicos no registrados"}
+              </p>
             </div>
           </div>
         </section>
 
-        {/* Timeline Premium */}
+        {/* Timeline / Historial clínico */}
         <section className="bg-white rounded-3xl p-6 border border-slate-200 shadow-[0_8px_25px_rgba(15,23,42,0.06)] space-y-8">
-          <h3 className="text-xl font-semibold text-slate-900">Historial clínico</h3>
+          <h3 className="text-xl font-semibold text-slate-900">
+            Historial clínico
+          </h3>
 
-          <div className="relative border-l-2 border-sky-200 ml-4 space-y-10">
-            {registros.map((item, i) => (
-              <div key={i} className="relative pl-8">
-                {/* Punto del timeline */}
-                <div className="absolute -left-[10px] top-1 h-4 w-4 rounded-full bg-sky-600 shadow shadow-sky-600/30" />
+          {loading ? (
+            <p className="text-sm text-slate-500">Cargando historial...</p>
+          ) : registros.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Aún no hay registros clínicos para esta mascota.
+            </p>
+          ) : (
+            <div className="relative border-l-2 border-sky-200 ml-4 space-y-10">
+              {registros.map((item) => (
+                <div key={item.id} className="relative pl-8">
+                  {/* Punto del timeline */}
+                  <div className="absolute -left-[10px] top-1 h-4 w-4 rounded-full bg-sky-600 shadow shadow-sky-600/30" />
 
-                <div className="bg-slate-50 hover:bg-white transition rounded-2xl p-5 border border-slate-200 shadow-sm">
-                  <div className="flex items-center gap-2 text-sky-700 font-semibold">
-                    <Calendar className="h-4 w-4" />
-                    {item.fecha}
+                  <div className="bg-slate-50 hover:bg-white transition rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-2 text-sky-700 font-semibold">
+                      <Calendar className="h-4 w-4" />
+                      {formatFecha(item.fecha)}
+                    </div>
+                    {item.motivo_consulta && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-2">
+                          Motivo de la consulta:
+                        </p>
+                        <p className="text-slate-700">
+                          {item.motivo_consulta}
+                        </p>
+                      </>
+                    )}
+                    {item.diagnostico && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-2">
+                          Diagnóstico:
+                        </p>
+                        <p className="text-slate-700">{item.diagnostico}</p>
+                      </>
+                    )}
+
+                    {item.tratamientos && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-3">
+                          Tratamientos:
+                        </p>
+                        <p className="text-slate-700">{item.tratamientos}</p>
+                      </>
+                    )}
+
+                    {item.medicamentos && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-3">
+                          Medicamentos:
+                        </p>
+                        <p className="text-slate-700">{item.medicamentos}</p>
+                      </>
+                    )}
+
+                    {item.evolucion && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-3">
+                          Evolución:
+                        </p>
+                        <p className="text-slate-700">{item.evolucion}</p>
+                      </>
+                    )}
+
+                    {item.notas && (
+                      <>
+                        <p className="font-semibold text-slate-900 mt-3">
+                          Notas:
+                        </p>
+                        <p className="text-slate-700">{item.notas}</p>
+                      </>
+                    )}
                   </div>
-
-                  <p className="font-semibold text-slate-900 mt-2">
-                    Diagnóstico:
-                  </p>
-                  <p className="text-slate-700">{item.diagnostico}</p>
-
-                  <p className="font-semibold text-slate-900 mt-3">
-                    Evolución:
-                  </p>
-                  <p className="text-slate-700">{item.evolucion}</p>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
 
-      {/* Modal */}
+      {/* Modal para crear nuevo registro clínico */}
       <ModalAgregarRegistro
         open={openModal}
         onClose={() => setOpenModal(false)}
-        onSave={() => setOpenModal(false)}
+        onSave={handleSaveRegistro}
       />
     </LayoutVet>
   );

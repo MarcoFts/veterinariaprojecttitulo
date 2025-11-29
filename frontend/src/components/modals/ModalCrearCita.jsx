@@ -41,14 +41,12 @@ export default function ModalCrearCita({ open, onClose, slot, onConfirm }) {
       box: box.trim() || null,
     };
 
-    // Aquí en el futuro se llamará a crearCita(payload)
     if (onConfirm) onConfirm(payload);
     onClose();
   };
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-
       <div className="modal-window w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-100">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">

@@ -1,3 +1,4 @@
+// src/pages/cliente/citas.jsx
 import LayoutCliente from "../../components/layout/LayoutCliente";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
@@ -20,15 +21,20 @@ import {
   getDisponibilidad,
   reprogramarCita,
   cancelarCita,
+  getMotivosConsulta,
 } from "../../services/api";
 
 dayjs.locale("es");
+
+const LABEL_OTRO_MOTIVO = "Otro motivo";
 
 export default function Citas() {
   const hoy = dayjs().format("YYYY-MM-DD");
 
   const [fecha, setFecha] = useState(hoy);
   const [weekOffset, setWeekOffset] = useState(0); // desplazamiento de semanas (en días)
+
+  const [motivosPredef, setMotivosPredef] = useState([]);
 
   const [veterinarios, setVeterinarios] = useState([]);
   const [mascotas, setMascotas] = useState([]);
@@ -49,7 +55,8 @@ export default function Citas() {
     fecha: hoy,
     hora: "",
     duracion: 30, // uso interno
-    motivo: "",
+    motivo: "", // valor seleccionado del select
+    motivoOtro: "", // texto libre si selecciona "Otro motivo"
     box: "",
   });
 
@@ -95,6 +102,7 @@ export default function Citas() {
     }));
   };
 
+  // ---------- Cargar datos base (vets, mascotas, citas) ----------
   const cargarDatos = async () => {
     setLoading(true);
     setError("");
@@ -121,9 +129,37 @@ export default function Citas() {
     }
   };
 
+  // cargar motivos predefinidos desde el backend
+  const cargarMotivos = async () => {
+    try {
+      const resp = await getMotivosConsulta();
+      let base = resp.data || [];
+
+      // Nos aseguramos de que exista "Otro motivo"
+      const tieneOtro = base.some(
+        (m) => (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
+      );
+      if (!tieneOtro) {
+        base = [
+          ...base,
+          { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO },
+        ];
+      }
+
+      setMotivosPredef(base);
+    } catch (err) {
+      console.error("Error cargando motivos de consulta:", err);
+      // si falla, simplemente dejamos el arreglo vacío
+    }
+  };
+
   useEffect(() => {
     cargarDatos();
   }, [fecha]);
+
+  useEffect(() => {
+    cargarMotivos();
+  }, []);
 
   // ---------- Disponibilidad para crear cita ----------
 
@@ -179,8 +215,7 @@ export default function Citas() {
 
   // navegar semanas con flechas
   const handleWeekNav = async (direction) => {
-    let nextOffset =
-      direction === "next" ? weekOffset + 7 : weekOffset - 7;
+    let nextOffset = direction === "next" ? weekOffset + 7 : weekOffset - 7;
 
     // no permitimos ir a antes de hoy
     if (nextOffset < 0) {
@@ -238,18 +273,33 @@ export default function Citas() {
       return;
     }
 
+    // Si seleccionó "Otro motivo", exigimos que escriba el texto
+    if (
+      form.motivo === LABEL_OTRO_MOTIVO &&
+      !form.motivoOtro.trim()
+    ) {
+      alert("Por favor escribe el motivo de la consulta.");
+      return;
+    }
+
     const inicio = `${form.fecha}T${form.hora}`;
     const durMin = Number(form.duracion || 30);
     const fin = dayjs(inicio)
       .add(durMin, "minute")
       .format("YYYY-MM-DDTHH:mm");
 
+    // motivo final: si es "Otro motivo", usamos el texto libre
+    const motivoFinal =
+      form.motivo === LABEL_OTRO_MOTIVO
+        ? form.motivoOtro.trim()
+        : form.motivo || "";
+
     const payload = {
       mascota: form.mascota,
       veterinario: form.veterinario,
       inicio,
       fin,
-      motivo: form.motivo || "",
+      motivo: motivoFinal,
       box: form.box || "",
     };
 
@@ -260,6 +310,7 @@ export default function Citas() {
         ...prev,
         hora: "",
         motivo: "",
+        motivoOtro: "",
       }));
       setSlots([]);
       await cargarDatos();
@@ -300,10 +351,10 @@ export default function Citas() {
     setSlotsReprog([]);
     try {
       const dur = calcularDuracionCita(cita);
-  
+
       // Aseguramos el id del vet
       const vetId = cita.veterinario_id || cita.veterinario;
-  
+
       const resp = await getDisponibilidad({
         veterinario_id: vetId,
         fecha: fechaReprog,
@@ -312,7 +363,7 @@ export default function Citas() {
         // porque los horarios del vet no tienen box definido.
         box: "",
       });
-  
+
       setSlotsReprog(resp.data?.slots || []);
     } catch (err) {
       console.error(err);
@@ -320,7 +371,7 @@ export default function Citas() {
       setLoadingSlotsReprog(false);
     }
   };
-  
+
   const abrirModalReprogramar = async (cita) => {
     setSelectedCita(cita);
     const fechaActual = cita.inicio?.slice(0, 10) || fecha;
@@ -455,7 +506,8 @@ export default function Citas() {
                   {veterinarios.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.nombre ||
-                        `${(v.first_name || "")} ${(v.last_name || "")}`.trim() ||
+                        `${(v.first_name || "")} ${(v.last_name || "")}`
+                          .trim() ||
                         v.email ||
                         `Veterinario #${v.id}`}
                     </option>
@@ -529,89 +581,124 @@ export default function Citas() {
                 </div>
               </div>
 
-              {/* Motivo */}
+              {/* Motivo (select + input cuando es "Otro motivo") */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">
-                  Motivo (opcional)
+                  Motivo de consulta (opcional)
                 </label>
-                <input
-                  type="text"
-                  name="motivo"
-                  value={form.motivo}
-                  onChange={handleChangeForm}
-                  placeholder="Control, vacuna, urgencia..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                />
+                {motivosPredef.length === 0 ? (
+                  <select
+                    name="motivo"
+                    value={form.motivo}
+                    onChange={handleChangeForm}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  >
+                    <option value="">
+                      No se pudieron cargar los motivos. (opcional)
+                    </option>
+                  </select>
+                ) : (
+                  <select
+                    name="motivo"
+                    value={form.motivo}
+                    onChange={handleChangeForm}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  >
+                    <option value="">Selecciona un motivo</option>
+                    {motivosPredef.map((m) => (
+                      <option
+                        key={m.codigo || m.nombre}
+                        value={m.nombre}
+                      >
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Si el usuario escoge "Otro motivo", mostramos input libre */}
+                {form.motivo === LABEL_OTRO_MOTIVO && (
+                  <input
+                    type="text"
+                    name="motivoOtro"
+                    value={form.motivoOtro}
+                    onChange={handleChangeForm}
+                    placeholder="Escribe el motivo de la consulta"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 mt-2"
+                  />
+                )}
               </div>
-                              {/* Horarios disponibles */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-sky-500" />
-                      Horarios disponibles
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => cargarSlotsCrear()}
-                      className="text-[11px] text-sky-600 hover:underline"
-                    >
-                      Actualizar horarios
-                    </button>
-                  </div>
 
-                  {loadingSlots ? (
-                    <p className="text-xs text-slate-500">
-                      Buscando disponibilidad...
-                    </p>
-                  ) : !form.veterinario || !form.fecha ? (
-                    <p className="text-xs text-slate-500">
-                      Selecciona veterinario y fecha para ver horarios libres.
-                    </p>
-                  ) : slots.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      No hay horarios disponibles para este día.
-                    </p>
-                  ) : (
-                    <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
-                      <p className="text-[11px] text-slate-500 mb-2">
-                        Horarios disponibles para{" "}
-                        <span className="font-semibold">
-                          {dayjs(form.fecha).format("ddd DD MMM YYYY")}
-                        </span>
-                      </p>
-
-                      {/* Aquí eliges la hora, como en la foto */}
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                        {slots.map((h) => (
-                          <label
-                            key={h}
-                            className={
-                              "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
-                              (form.hora === h
-                                ? "bg-sky-600 text-white border-sky-600"
-                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
-                            }
-                          >
-                            <input
-                              type="radio"
-                              name="hora"
-                              value={h}
-                              checked={form.hora === h}
-                              onChange={() =>
-                                setForm((prev) => ({
-                                  ...prev,
-                                  hora: h, // LA HORA VIENE DEL BACKEND
-                                }))
-                              }
-                              className="hidden"
-                            />
-                            {h}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              {/* Horarios disponibles */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-sky-500" />
+                    Horarios disponibles
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => cargarSlotsCrear()}
+                    className="text-[11px] text-sky-600 hover:underline"
+                  >
+                    Actualizar horarios
+                  </button>
                 </div>
+
+                {loadingSlots ? (
+                  <p className="text-xs text-slate-500">
+                    Buscando disponibilidad...
+                  </p>
+                ) : !form.veterinario || !form.fecha ? (
+                  <p className="text-xs text-slate-500">
+                    Selecciona veterinario y fecha para ver horarios libres.
+                  </p>
+                ) : slots.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No hay horarios disponibles para este día.
+                  </p>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] text-slate-500 mb-2">
+                      Horarios disponibles para{" "}
+                      <span className="font-semibold">
+                        {dayjs(form.fecha).format("ddd DD MMM YYYY")}
+                      </span>
+                    </p>
+
+                    {/* Aquí eliges la hora, como en la foto */}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                      {slots.map((h) => (
+                        <label
+                          key={h}
+                          className={
+                            "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
+                            (form.hora === h
+                              ? "bg-sky-600 text-white border-sky-600"
+                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
+                          }
+                        >
+                          <input
+                            type="radio"
+                            name="hora"
+                            value={h}
+                            checked={form.hora === h}
+                            onChange={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                hora: h, // LA HORA VIENE DEL BACKEND
+                              }))
+                            }
+                            className="hidden"
+                          />
+                          {h}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={loadingForm}
@@ -662,7 +749,8 @@ export default function Citas() {
                       </div>
                       <div>
                         <p className="font-medium text-slate-800">
-                          {cita.mascota_nombre || `Mascota #${cita.mascota}`}
+                          {cita.mascota_nombre ||
+                            `Mascota #${cita.mascota}`}
                         </p>
                         <p className="text-xs text-slate-600">
                           Vet:{" "}
@@ -735,49 +823,48 @@ export default function Citas() {
                     Horarios disponibles
                   </label>
                   {loadingSlotsReprog ? (
-                  <p className="text-xs text-slate-500">
-                    Cargando horarios disponibles...
-                  </p>
-                ) : slotsReprog.length === 0 ? (
-                  <p className="text-xs text-slate-500">
-                    No hay horarios disponibles para esta fecha.
-                  </p>
-                ) : (
-                  <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
-                    <p className="text-[11px] text-slate-500 mb-2">
-                      Horarios disponibles para{" "}
-                      <span className="font-semibold">
-                        {dayjs(nuevaFecha).format("ddd DD MMM YYYY")}
-                      </span>
+                    <p className="text-xs text-slate-500">
+                      Cargando horarios disponibles...
                     </p>
+                  ) : slotsReprog.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      No hay horarios disponibles para esta fecha.
+                    </p>
+                  ) : (
+                    <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
+                      <p className="text-[11px] text-slate-500 mb-2">
+                        Horarios disponibles para{" "}
+                        <span className="font-semibold">
+                          {dayjs(nuevaFecha).format("ddd DD MMM YYYY")}
+                        </span>
+                      </p>
 
-                    {/* selector de hora estilo grilla, similar a la referencia */}
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                      {slotsReprog.map((h) => (
-                        <label
-                          key={h}
-                          className={
-                            "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
-                            (slotSeleccionado === h
-                              ? "bg-sky-600 text-white border-sky-600"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
-                          }
-                        >
-                          <input
-                            type="radio"
-                            name="hora-reprog"
-                            value={h}
-                            checked={slotSeleccionado === h}
-                            onChange={() => setSlotSeleccionado(h)}
-                            className="hidden"
-                          />
-                          {h}
-                        </label>
-                      ))}
+                      {/* selector de hora estilo grilla, similar a la referencia */}
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                        {slotsReprog.map((h) => (
+                          <label
+                            key={h}
+                            className={
+                              "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
+                              (slotSeleccionado === h
+                                ? "bg-sky-600 text-white border-sky-600"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
+                            }
+                          >
+                            <input
+                              type="radio"
+                              name="hora-reprog"
+                              value={h}
+                              checked={slotSeleccionado === h}
+                              onChange={() => setSlotSeleccionado(h)}
+                              className="hidden"
+                            />
+                            {h}
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">

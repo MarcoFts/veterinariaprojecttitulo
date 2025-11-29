@@ -5,7 +5,11 @@ import LayoutVet from "../../components/layout/LayoutVet";
 import SlotCard from "../../components/agenda/SlotCard";
 import ModalCrearCita from "../../components/modals/ModalCrearCita";
 import ModalReprogramarCita from "../../components/modals/ModalReprogramarCita";
-// import { getSlotsPorFecha } from "../../services/citas"; // para futuro backend
+import {
+  me as getUserProfile,
+  getDisponibilidad,
+  getCitas,
+} from "../../services/api";
 
 // Genera un string YYYY-MM-DD de hoy
 const todayStr = () => {
@@ -16,64 +20,139 @@ const todayStr = () => {
   return `${year}-${month}-${day}`;
 };
 
-// Mock simple de slots
-function buildMockSlots() {
-  return [
-    {
-      id: 1,
-      horaInicio: "09:00",
-      horaFin: "09:30",
-      estado: "libre",
-      paciente: null,
-      mascota: null,
-    },
-    {
-      id: 2,
-      horaInicio: "09:30",
-      horaFin: "10:00",
-      estado: "ocupada",
-      paciente: "Juan Pérez",
-      mascota: "Firulais",
-    },
-    {
-      id: 3,
-      horaInicio: "10:00",
-      horaFin: "10:30",
-      estado: "libre",
-      paciente: null,
-      mascota: null,
-    },
-    {
-      id: 4,
-      horaInicio: "10:30",
-      horaFin: "11:00",
-      estado: "cancelada",
-      paciente: "María López",
-      mascota: "Michi",
-    },
-  ];
-}
+// suma minutos a "HH:MM" y devuelve "HH:MM"
+const sumarMinutos = (horaStr, minutos) => {
+  const [h, m] = horaStr.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m + minutos, 0, 0);
+  return d.toTimeString().slice(0, 5);
+};
 
 export default function VetAgendaDia() {
   const [fecha, setFecha] = useState(todayStr());
-  const [slots, setSlots] = useState(buildMockSlots);
+  const [slots, setSlots] = useState([]);
 
   const [slotParaAsignar, setSlotParaAsignar] = useState(null);
   const [citaParaReprogramar, setCitaParaReprogramar] = useState(null);
 
-  // En el futuro, aquí se consumirá getSlotsPorFecha(fecha)
+  const [vetId, setVetId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // 1) Obtener info del usuario para saber el id del veterinario
   useEffect(() => {
-    // Ejemplo de cómo será:
-    // getSlotsPorFecha(fecha).then((res) => setSlots(res.data));
-    setSlots(buildMockSlots());
-  }, [fecha]);
+    const fetchUser = async () => {
+      try {
+        const res = await getUserProfile();
+        if (res.data?.id) {
+          setVetId(res.data.id);
+        }
+      } catch (err) {
+        console.error("Error obteniendo perfil:", err);
+        setError("No se pudo obtener la información del veterinario.");
+      }
+    };
+    fetchUser();
+  }, []);
+
+  // 2) Cargar agenda del día desde el backend (disponibilidad + citas)
+  useEffect(() => {
+    if (!vetId) return;
+
+    const fetchAgendaDia = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [dispRes, citasRes] = await Promise.all([
+          getDisponibilidad({
+            veterinario_id: vetId,
+            fecha,
+            duracion: 30, // mismo tamaño de bloque que en backend
+            box: "BOX-1",
+          }),
+          getCitas({ fecha }),
+        ]);
+
+        const libres = dispRes?.data?.slots || [];
+
+        const rawCitas = Array.isArray(citasRes.data)
+          ? citasRes.data
+          : Array.isArray(citasRes.data?.results)
+          ? citasRes.data.results
+          : [];
+
+        const citas = rawCitas.map((c) => {
+          const d = new Date(c.inicio);
+          const horaInicio = d.toTimeString().slice(0, 5);
+          return {
+            ...c,
+            horaInicio,
+            horaFin: sumarMinutos(horaInicio, 30),
+          };
+        });
+
+        // Unir horas libres + horas de citas (ocupadas o canceladas)
+        const horasSet = new Set();
+        libres.forEach((h) => horasSet.add(h));
+        citas.forEach((c) => horasSet.add(c.horaInicio));
+        const horasOrdenadas = Array.from(horasSet).sort();
+
+        const nuevosSlots = horasOrdenadas.map((hora, idx) => {
+          const cita = citas.find((c) => c.horaInicio === hora);
+
+          if (cita) {
+            const estado = cita.estado === "cancelada" ? "cancelada" : "ocupada";
+            const paciente =
+              cita.cliente_nombre ||
+              cita.cliente?.nombre_completo ||
+              cita.cliente?.nombre ||
+              null;
+            const mascotaNombre =
+              cita.mascota_nombre || cita.mascota?.nombre || null;
+
+            return {
+              id: cita.id || idx + 1,
+              horaInicio: hora,
+              horaFin: sumarMinutos(hora, 30),
+              estado,
+              paciente,
+              mascota: mascotaNombre,
+              citaId: cita.id,
+            };
+          }
+
+          // Slot libre (viene solo desde /agenda/disponibilidad/)
+          return {
+            id: `libre-${idx}`,
+            horaInicio: hora,
+            horaFin: sumarMinutos(hora, 30),
+            estado: "libre",
+            paciente: null,
+            mascota: null,
+            citaId: null,
+          };
+        });
+
+        setSlots(nuevosSlots);
+      } catch (err) {
+        console.error("Error cargando agenda del día:", err);
+        setError("No se pudo cargar la agenda para esa fecha.");
+        setSlots([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgendaDia();
+  }, [fecha, vetId]);
 
   const slotsOrdenados = useMemo(() => {
     return [...slots].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
   }, [slots]);
 
+  // ---- Acciones (por ahora siguen siendo locales/mock) ----
   const handleAsignarConfirm = (payload) => {
-    // Mock: marcamos el slot como "ocupada" localmente
+    // TODO: aquí se puede llamar a crearCita(payload) contra el backend
     setSlots((prev) =>
       prev.map((s) =>
         s.id === payload.slot_id
@@ -89,7 +168,7 @@ export default function VetAgendaDia() {
   };
 
   const handleReprogramarConfirm = (payload) => {
-    // Mock: solo mostramos efecto local simple (podrías moverlo a otra hora en el futuro)
+    // TODO: aquí se puede llamar a reprogramarCita(payload) contra el backend
     setSlots((prev) =>
       prev.map((s) =>
         s.id === payload.id
@@ -104,6 +183,7 @@ export default function VetAgendaDia() {
   };
 
   const handleCancelarSlot = (slotId) => {
+    // TODO: aquí se puede llamar a cancelarCita(slotId) contra el backend
     setSlots((prev) =>
       prev.map((s) =>
         s.id === slotId ? { ...s, estado: "cancelada" } : s
@@ -127,6 +207,11 @@ export default function VetAgendaDia() {
               Revisa tus horas disponibles, ocupadas y canceladas para la fecha
               seleccionada.
             </p>
+            {error && (
+              <p className="mt-2 text-xs text-rose-500">
+                {error}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -158,16 +243,24 @@ export default function VetAgendaDia() {
             </div>
 
             <div className="space-y-2">
-              {slotsOrdenados.map((slot) => (
-                <SlotCard
-                  key={slot.id}
-                  slot={slot}
-                  onAsignar={() => setSlotParaAsignar(slot)}
-                  onReprogramar={() => setCitaParaReprogramar(slot)}
-                  onCancelar={() => handleCancelarSlot(slot.id)}
-                />
-              ))}
-              {slotsOrdenados.length === 0 && (
+              {loading && (
+                <p className="text-xs text-slate-500">
+                  Cargando agenda del día...
+                </p>
+              )}
+
+              {!loading &&
+                slotsOrdenados.map((slot) => (
+                  <SlotCard
+                    key={slot.id}
+                    slot={slot}
+                    onAsignar={() => setSlotParaAsignar(slot)}
+                    onReprogramar={() => setCitaParaReprogramar(slot)}
+                    onCancelar={() => handleCancelarSlot(slot.id)}
+                  />
+                ))}
+
+              {!loading && slotsOrdenados.length === 0 && (
                 <p className="text-xs text-slate-500">
                   No hay horas generadas para esta fecha.
                 </p>
@@ -195,14 +288,14 @@ export default function VetAgendaDia() {
               </li>
             </ul>
             <p className="text-[11px] text-slate-400">
-              Más adelante esta vista se conectará en tiempo real con la
-              disponibilidad y las reservas del backend.
+              Esta vista se alimenta de tus horarios, bloqueos y citas
+              almacenadas en el backend.
             </p>
           </div>
         </section>
       </div>
 
-      {/* Modales */}
+      {/* Modales (por ahora siguen trabajando en local/mock) */}
       <ModalCrearCita
         open={!!slotParaAsignar}
         slot={slotParaAsignar}

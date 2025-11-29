@@ -9,6 +9,7 @@ from .models import (
     MovimientoInventario,
     HorarioAtencion,
     BloqueoAgenda,
+    RegistroClinico,
 )
 
 
@@ -195,6 +196,50 @@ class CitaSerializer(serializers.ModelSerializer):
 
         return data
 
+class RegistroClinicoSerializer(serializers.ModelSerializer):
+    veterinario_nombre = serializers.SerializerMethodField()
+    mascota_nombre = serializers.CharField(source="mascota.nombre", read_only=True)
+
+    class Meta:
+        model = RegistroClinico
+        fields = [
+            "id",
+            "mascota",
+            "mascota_nombre",
+            "veterinario",
+            "veterinario_nombre",
+            "cita",
+            "fecha",
+            "motivo_consulta",
+            "diagnostico",
+            "procedimientos",
+            "tratamientos",
+            "medicamentos",
+            "evolucion",
+            "notas",
+        ]
+        read_only_fields = ["veterinario", "veterinario_nombre"]
+
+    def get_veterinario_nombre(self, obj):
+        full = f"{obj.veterinario.first_name} {obj.veterinario.last_name}".strip()
+        return full or obj.veterinario.email or obj.veterinario.username
+
+    def create(self, validated_data):
+        """El veterinario se toma del usuario logueado."""
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError({"detail": "Usuario no autenticado."})
+
+        # Solo veterinario / staff pueden crear registros clínicos
+        if not (user.is_staff or getattr(user, "is_veterinario", False)):
+            raise serializers.ValidationError(
+                {"detail": "No tienes permisos para crear registros clínicos."}
+            )
+
+        validated_data["veterinario"] = user
+        return super().create(validated_data)
 
 # ---------- Inventario ----------
 
