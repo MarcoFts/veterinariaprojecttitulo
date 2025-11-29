@@ -77,7 +77,7 @@ export default function VeterinarioLogin() {
         {/* ENCABEZADO */}
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] uppercase text-blue-600 mb-2">
-            VETCARE · VETERINARIO
+            Vetyon · VETERINARIO
           </p>
           <h1 className="text-2xl font-bold text-slate-900">
             Iniciar sesión como Veterinario

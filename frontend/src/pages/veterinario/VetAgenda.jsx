@@ -9,8 +9,8 @@ export default function VetAgenda() {
   const hoyISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [fecha, setFecha] = useState(hoyISO);
 
-  const [horarios, setHorarios] = useState([]);   // todos los horarios del vet
-  const [bloquesDia, setBloquesDia] = useState([]); // filtrados por fecha
+  const [horarios, setHorarios] = useState([]);
+  const [bloquesDia, setBloquesDia] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -20,21 +20,30 @@ export default function VetAgenda() {
     box: "",
   });
 
-  // calcula dia_semana basado en la fecha elegida
+  // 🔹 MINI-MODAL (sin blur)
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [bloqueAEliminar, setBloqueAEliminar] = useState(null);
+
+  // -------------------------------
+  // DIA SEMANA SEGÚN FECHA
+  // -------------------------------
   const diaSemana = useMemo(() => {
     const d = new Date(fecha + "T00:00:00");
-    // JS: 0=Dom..6=Sáb  -> lo pasamos a 0=Lun..6=Dom
     const jsDay = d.getDay();
-    return (jsDay + 6) % 7;
+    return (jsDay + 6) % 7; // pasar de JS 0=Dom -> 0=Lun
   }, [fecha]);
 
+  // -------------------------------
+  // FETCH HORARIOS DEL BACKEND
+  // -------------------------------
   const fetchHorarios = async () => {
     setLoading(true);
     setError("");
-    try {
-      const res = await api.get("/horarios/"); // <-- CRUD real
 
+    try {
+      const res = await api.get("/horarios/");
       const raw = res.data;
+
       const lista =
         Array.isArray(raw) ? raw :
         Array.isArray(raw?.results) ? raw.results :
@@ -54,18 +63,18 @@ export default function VetAgenda() {
     }
   };
 
-  // cargar horarios al entrar
   useEffect(() => {
     fetchHorarios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // filtrar por día de semana cada vez que cambia fecha u horarios
   useEffect(() => {
-    const filtrados = horarios.filter((h) => h.dia_semana === diaSemana);
-    setBloquesDia(filtrados);
+    setBloquesDia(horarios.filter((h) => h.dia_semana === diaSemana));
   }, [horarios, diaSemana]);
 
+  // -------------------------------
+  // FORM
+  // -------------------------------
   const handleChange = (e) => {
     setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   };
@@ -92,29 +101,47 @@ export default function VetAgenda() {
     } catch (err) {
       setError(
         err?.response?.data?.detail ||
-          "No se pudo crear el bloque. Revisa solapamientos."
+        "No se pudo crear el bloque. Revisa solapamientos."
       );
     }
   };
 
-  const handleEliminar = async (id) => {
-    if (!confirm("¿Eliminar este bloque?")) return;
+  // -------------------------------
+  // ELIMINAR BLOQUE (usa mini-modal)
+  // -------------------------------
+  const solicitarEliminar = (id) => {
+    setBloqueAEliminar(id);
+    setShowConfirm(true);
+  };
+
+  const cancelarEliminar = () => {
+    setShowConfirm(false);
+    setBloqueAEliminar(null);
+  };
+
+  const confirmarEliminar = async () => {
     try {
-      await api.delete(`/horarios/${id}/`);
+      await api.delete(`/horarios/${bloqueAEliminar}/`);
       fetchHorarios();
     } catch {
       setError("No se pudo eliminar el bloque.");
+    } finally {
+      setShowConfirm(false);
+      setBloqueAEliminar(null);
     }
   };
 
+  // --------------------------------------------------------------------
+  // JSX
+  // --------------------------------------------------------------------
   return (
     <LayoutVet>
       <div className="space-y-6">
-        {/* Encabezado */}
+        {/* ENCABEZADO */}
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Veterinario
+              Vetyon · Veterinario
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
               Agenda y disponibilidad
@@ -127,7 +154,6 @@ export default function VetAgenda() {
             </p>
           </div>
 
-          {/* Selector fecha */}
           <div className="flex items-center gap-2">
             <label className="text-sm text-slate-700">Fecha:</label>
             <input
@@ -139,12 +165,14 @@ export default function VetAgenda() {
           </div>
         </section>
 
+        {/* ERRORES */}
         {error && (
           <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
             {error}
           </div>
         )}
 
+        {/* CUERPO */}
         <section className="grid gap-4 md:grid-cols-2">
           {/* Crear bloque */}
           <div className="rounded-2xl bg-white border border-slate-100 shadow-card p-4">
@@ -165,6 +193,7 @@ export default function VetAgenda() {
                     required
                   />
                 </div>
+
                 <div>
                   <label className="text-xs text-slate-600">Fin</label>
                   <input
@@ -228,7 +257,7 @@ export default function VetAgenda() {
                     </div>
 
                     <button
-                      onClick={() => handleEliminar(b.id)}
+                      onClick={() => solicitarEliminar(b.id)}
                       className="text-xs font-semibold text-red-600 hover:text-red-700"
                     >
                       Eliminar
@@ -240,6 +269,43 @@ export default function VetAgenda() {
           </div>
         </section>
       </div>
+
+      {/* MINI-MODAL DE CONFIRMACIÓN (SIN BLUR) */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+          <div className="w-full max-w-xs bg-white rounded-2xl shadow-xl border border-slate-200 animate-fadeScale">
+
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-900">
+                Confirmar eliminación
+              </p>
+            </div>
+
+            <div className="px-5 py-4 text-sm text-slate-700">
+              ¿Eliminar este bloque horario?
+            </div>
+
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-100">
+              <button
+                onClick={cancelarEliminar}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={confirmarEliminar}
+                className="rounded-xl bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 transition"
+              >
+                Eliminar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </LayoutVet>
   );
 }
+
+/* ANIMACIÓN */

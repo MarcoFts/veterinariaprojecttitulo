@@ -36,7 +36,7 @@ export default function ClienteLogin() {
         {/* ENCABEZADO */}
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] uppercase text-sky-600 mb-2">
-            VETCARE · CLIENTE
+            Vetyon · CLIENTE
           </p>
           <h1 className="text-2xl font-bold text-slate-900">
             Iniciar sesión como Cliente

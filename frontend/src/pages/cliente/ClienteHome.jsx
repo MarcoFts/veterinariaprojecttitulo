@@ -16,11 +16,11 @@ export default function ClienteHome() {
           <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
             <div className="max-w-xl">
               <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-2">
-                VetCare · Panel del Cliente
+                Vetyon · Panel del Cliente
               </p>
 
               <h1 className="text-4xl font-extrabold text-slate-900 leading-tight">
-                Tu espacio <span className="text-sky-600">personal</span> en VetCare
+                Tu espacio <span className="text-sky-600">personal</span> en Vetyon
               </h1>
 
               <p className="text-base text-slate-600 mt-3 leading-relaxed">
@@ -84,11 +84,12 @@ export default function ClienteHome() {
             </div>
 
             <Link
-              to="/cliente/mascotas/registrar"
+              to="/cliente/mascotas"
               className="text-sm font-medium text-sky-600 hover:text-blue-700 transition"
             >
               Registrar mascota →
             </Link>
+
           </div>
 
           {/* RESUMEN RÁPIDO */}

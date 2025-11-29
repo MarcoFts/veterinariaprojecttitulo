@@ -40,7 +40,7 @@ export default function VetHome() {
             {/* Texto principal */}
             <div className="max-w-xl">
               <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-2">
-                VetCare · Panel Veterinario
+                Vetyon · Panel Veterinario
               </p>
               <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 leading-tight">
                 Panel del profesional
@@ -53,7 +53,7 @@ export default function VetHome() {
 
               {/* Pequeña línea informativa */}
               <p className="mt-3 text-[11px] md:text-xs text-slate-500">
-                Estos datos se conectarán al backend de VetCare en el futuro.
+                Estos datos se conectarán al backend de Vetyon en el futuro.
               </p>
             </div>
 

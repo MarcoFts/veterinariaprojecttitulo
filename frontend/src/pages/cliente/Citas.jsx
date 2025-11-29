@@ -125,7 +125,7 @@ export default function Citas() {
         <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Cliente
+              Vetyon · Cliente
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
@@ -320,7 +320,7 @@ export default function Citas() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pt-1">
                 <p className="text-[11px] text-slate-400 max-w-xs">
                   Las citas se registrarán en tu panel y se conectarán al backend
-                  de VetCare en el futuro.
+                  de Vetyon en el futuro.
                 </p>
 
                 <button
