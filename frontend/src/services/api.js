@@ -106,6 +106,11 @@ export function crearMascota(payload) {
 export function getCitas(params) {
   return api.get("/citas/", { params });
 }
+// detalle de una cita
+export function getCita(id) {
+  return api.get(`/citas/${id}/`);
+}
+
 export function crearCita(payload) {
   return api.post("/citas/", payload);
 }
@@ -138,11 +143,28 @@ export function getRegistrosClinicos(params) {
 export function crearRegistroClinico(payload) {
   return api.post("/registros-clinicos/", payload);
 }
+export const actualizarHorario = (id, data) =>
+  api.put(`/horarios/${id}/`, data);
+
+export const eliminarHorario = (id) => api.delete(`/horarios/${id}/`);
 
 // mascota individual (detalle)
 export function getMascota(id) {
   return api.get(`/mascotas/${id}/`);
 }
 export const getMotivosConsulta = () => api.get("/motivos-consulta/");
+// ---------- HORARIOS DE ATENCIÓN ----------
+
+// Obtener horarios (por defecto el backend ya filtra por vet autenticado)
+export function getHorarios(params) {
+  return api.get("/horarios/", { params });
+}
+
+// Crear un nuevo horario
+export function crearHorario(data) {
+  // data: { dia_semana, hora_inicio, hora_fin }
+  return api.post("/horarios/", data);
+}
+
 
 export default api;

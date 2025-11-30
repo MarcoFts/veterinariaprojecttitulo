@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import LayoutVet from "../../components/layout/LayoutVet";
-import { UserRound } from "lucide-react";
+import { UserRound, Eye } from "lucide-react";
 import { getMascotas } from "../../services/api";
 
 export default function VetPacientes() {
@@ -11,8 +11,6 @@ export default function VetPacientes() {
   useEffect(() => {
     async function fetchPacientes() {
       try {
-        // Si tu backend filtra por veterinario según el usuario logueado,
-        // no necesitas pasar parámetros.
         const res = await getMascotas();
         setPacientes(res.data || []);
       } catch (error) {
@@ -26,14 +24,12 @@ export default function VetPacientes() {
   }, []);
 
   const getEdadTexto = (m) => {
-    // Ajusta según lo que te devuelva el backend (edad, fecha_nacimiento, etc.)
     if (m.edad) return `${m.edad} años`;
     if (m.edad_aproximada) return `${m.edad_aproximada} años (aprox.)`;
     return "Edad no registrada";
   };
 
   const getDuenoTexto = (m) => {
-    // Ajusta el nombre del campo al de tu serializer
     if (m.dueno_nombre) return m.dueno_nombre;
     if (m.cliente_nombre) return m.cliente_nombre;
     if (m.cliente?.nombre_completo) return m.cliente.nombre_completo;
@@ -90,12 +86,17 @@ export default function VetPacientes() {
                   </div>
                 </div>
 
-                <div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400">
+                    Historia clínica #{m.id}
+                  </span>
                   <Link
                     to={`/veterinario/paciente/${m.id}`}
-                    className="inline-flex items-center text-sm font-semibold text-sky-600 hover:text-sky-700"
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-sky-600 hover:text-sky-700"
+                    title="Ver ficha del paciente"
                   >
-                    Ver ficha clínica →
+                    <Eye className="h-4 w-4" />
+                    Ver
                   </Link>
                 </div>
               </article>

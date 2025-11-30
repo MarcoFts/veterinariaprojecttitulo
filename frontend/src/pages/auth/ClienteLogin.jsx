@@ -1,12 +1,17 @@
+// src/pages/auth/ClienteLogin.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login } from "../../services/api";
+import api, { login as apiLogin } from "../../services/api"; // axios + helper login
 import { setTokens } from "../../auth";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
+  const { login: setAuthUser } = useAuth(); // del AuthContext
+
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -14,19 +19,57 @@ export default function ClienteLogin() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      const resp = await login(form.email, form.password);
+      // 1) Login en backend
+      const resp = await apiLogin(form.email, form.password);
+      const { access, refresh } = resp.data; // JWT SimpleJWT típico
 
-      // resp.data trae { access, refresh }
-      setTokens({
-        access: resp.data.access,
-        refresh: resp.data.refresh,
-      });
+      if (!access) {
+        setError("No se recibió token de acceso. Revisa credenciales.");
+        setLoading(false);
+        return;
+      }
 
-      navigate("/cliente/home");
+      // 2) Guardar tokens (localStorage + headers axios, según tu auth.js)
+      setTokens({ access, refresh });
+
+      // 3) Consultar perfil para validar que es CLIENTE
+      const meRes = await api.get("/auth/me/");
+      const me = meRes.data;
+
+      if (!me?.cliente_id) {
+        setError("Esta cuenta no está registrada como cliente.");
+        setLoading(false);
+        return;
+      }
+
+      // 4) Guardar usuario en AuthContext
+      const userParaContexto = {
+        id: me.id,
+        email: me.email,
+        nombre: me.name,
+        rol: "cliente",
+        cliente_id: me.cliente_id,
+        is_vet: me.is_vet,
+        is_staff: me.is_staff,
+      };
+
+      // tokens ya se guardaron con setTokens
+      setAuthUser(userParaContexto);
+
+      // 5) Redirigir al home de cliente
+      navigate("/cliente/home", { replace: true });
     } catch (err) {
-      setError("Credenciales incorrectas o usuario no existe.");
+      console.error("Error en login cliente:", err?.response?.data || err);
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        "Credenciales incorrectas o usuario no existe.";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,6 +88,13 @@ export default function ClienteLogin() {
             Ingresa con tus datos para gestionar tus mascotas y citas.
           </p>
         </div>
+
+        {/* ERROR */}
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         {/* FORMULARIO */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -90,28 +140,14 @@ export default function ClienteLogin() {
             />
           </div>
 
-          {/* ERROR */}
-          {error && (
-            <p className="text-red-600 text-sm mt-1">{error}</p>
-          )}
-
-          {/* OLVIDÉ CONTRASEÑA */}
-          <div className="flex justify-end">
-            <Link
-              to="/recuperar-cliente"
-              className="text-xs font-medium text-sky-600 hover:text-blue-700"
-            >
-              ¿Olvidaste tu contraseña?
-            </Link>
-          </div>
-
           {/* BOTÓN */}
           <button
             type="submit"
+            disabled={loading}
             className="w-full mt-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 text-white 
-            text-sm font-semibold py-2.5 shadow-md hover:shadow-lg hover:opacity-95 transition"
+            text-sm font-semibold py-2.5 shadow-md hover:shadow-lg hover:opacity-95 transition disabled:opacity-60"
           >
-            Iniciar sesión
+            {loading ? "Iniciando..." : "Iniciar sesión"}
           </button>
         </form>
 

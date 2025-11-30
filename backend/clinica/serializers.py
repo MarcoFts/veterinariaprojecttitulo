@@ -19,10 +19,38 @@ User = get_user_model()
 # ---------- Cliente / Mascota ----------
 
 class MascotaSerializer(serializers.ModelSerializer):
+    # Campos calculados para el tutor/cliente
+    dueno_nombre = serializers.SerializerMethodField()
+    dueno_telefono = serializers.SerializerMethodField()
+    dueno_rut = serializers.SerializerMethodField()
+
     class Meta:
         model = Mascota
-        # No exponemos el cliente aquí (va aparte)
         exclude = ("cliente",)
+
+    def get_dueno_nombre(self, obj):
+        cliente = getattr(obj, "cliente", None)
+        if not cliente:
+            return None
+
+        u = getattr(cliente, "user", None)
+        if not u:
+            return f"Cliente {cliente.pk}"
+
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.email or u.username
+
+    def get_dueno_telefono(self, obj):
+        cliente = getattr(obj, "cliente", None)
+        if not cliente:
+            return None
+        return getattr(cliente, "telefono", None)
+
+    def get_dueno_rut(self, obj):
+        cliente = getattr(obj, "cliente", None)
+        if not cliente:
+            return None
+        return getattr(cliente, "rut_dni", None)
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -225,7 +253,10 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         return full or obj.veterinario.email or obj.veterinario.username
 
     def create(self, validated_data):
-        """El veterinario se toma del usuario logueado."""
+        """
+        - El veterinario se toma del usuario logueado.
+        - Si viene una cita asociada, la marca como 'completada'.
+        """
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
@@ -238,8 +269,28 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 {"detail": "No tienes permisos para crear registros clínicos."}
             )
 
+        # Veterinario del registro = usuario logueado
         validated_data["veterinario"] = user
-        return super().create(validated_data)
+
+        # Guardamos la cita (si existe) para actualizar su estado luego
+        cita = validated_data.get("cita", None)
+
+        # Creamos el registro clínico normalmente
+        registro = super().create(validated_data)
+
+        # Si había una cita asociada, la marcamos como 'completada'
+        if cita is not None:
+            try:
+                from .models import Cita  # por si acaso
+
+                if isinstance(cita, Cita):
+                    cita.estado = "completada"
+                    cita.save(update_fields=["estado"])
+            except Exception:
+                # No rompemos la creación del registro si algo falla aquí
+                pass
+
+        return registro
 
 # ---------- Inventario ----------
 

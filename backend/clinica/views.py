@@ -42,9 +42,10 @@ User = get_user_model()
 # ---------- HELPERS DE ROL ----------
 def user_is_vet(user):
     """Retorna True si el usuario es veterinario (campo o grupo)."""
-    return getattr(user, "es_veterinario", False) or user.groups.filter(
+    return getattr(user, "is_veterinario", False) or user.groups.filter(
         name="veterinarios"
     ).exists()
+
 
 
 def user_is_client(user):
@@ -592,7 +593,6 @@ def me(request):
             "cliente_id": cliente.id if cliente else None,
         }
     )
-
 
 # ---------- VETERINARIOS ----------
 @api_view(["GET"])

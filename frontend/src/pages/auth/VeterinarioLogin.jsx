@@ -1,11 +1,14 @@
+// src/pages/auth/VeterinarioLogin.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { setTokens, logout } from "../../auth"; // ajusta ruta si auth.js está en otro lado
-import api from "../../services/api"; // si tu api.js exporta axios instance default
-// Si NO tienes ese api, más abajo te dejo versión con fetch
+import { setTokens, logout } from "../../auth"; // auth helpers
+import api from "../../services/api"; // axios instance
+import { useAuth } from "../../context/AuthContext";
 
 export default function VeterinarioLogin() {
   const navigate = useNavigate();
+  const { login: setAuthUser } = useAuth(); // desde AuthContext
+
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,24 +46,43 @@ export default function VeterinarioLogin() {
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
 
-      // Ajusta esta validación según tu backend:
       const esVeterinario =
+        me?.is_vet === true ||
         me?.is_veterinario === true ||
-        me?.rol === "veterinario" ||
-        me?.tipo === "veterinario" ||
         me?.is_staff === true;
 
       if (!esVeterinario) {
+        // Limpia tokens si no es vet
         logout();
         setError("Esta cuenta no tiene permiso de veterinario.");
         setLoading(false);
         return;
       }
 
-      // 4) Redirigir
+      // 4) Guardar usuario en AuthContext
+      const userParaContexto = {
+        rol: "veterinario",
+        email: me?.email || form.email,
+        first_name: me?.first_name ?? me?.nombre ?? "",
+        last_name: me?.last_name ?? me?.apellido ?? "",
+        clinica_nombre:
+          me?.clinica_nombre || me?.clinic_name || "Clínica Veterinaria",
+        clinica_direccion: me?.clinica_direccion || me?.direccion || "",
+        telefono: me?.telefono || me?.phone || "",
+        numero_registro:
+          me?.numero_registro ||
+          me?.registro_colegio ||
+          me?.n_registro ||
+          "",
+        raw: me,
+      };
+
+      // tokens ya se guardaron con setTokens
+      setAuthUser(userParaContexto);
+
+      // 5) Redirigir
       navigate("/veterinario/home", { replace: true });
     } catch (err) {
-      // Errores típicos DRF
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||
@@ -98,7 +120,10 @@ export default function VeterinarioLogin() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* EMAIL */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-slate-700"
+            >
               Correo institucional
             </label>
             <input
@@ -116,7 +141,10 @@ export default function VeterinarioLogin() {
 
           {/* PASSWORD */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-slate-700"
+            >
               Contraseña
             </label>
             <input
