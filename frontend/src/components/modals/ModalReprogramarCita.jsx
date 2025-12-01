@@ -1,143 +1,288 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+// src/components/modals/ModalReprogramarCita.jsx
+import { useEffect, useMemo, useState } from "react";
 import {
-  getCita,
-  getDisponibilidad,
-  reprogramarCita,
-} from "../../services/api";
+  X,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+} from "lucide-react";
+import dayjs from "dayjs";
+import "dayjs/locale/es";
+import { getDisponibilidad, reprogramarCita } from "../../services/api";
 
-export default function ReprogramarCita() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+dayjs.locale("es");
 
-  const [cita, setCita] = useState(null);
-  const [fecha, setFecha] = useState("");
-  const [horasDisponibles, setHorasDisponibles] = useState([]);
-  const [horaSeleccionada, setHoraSeleccionada] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function ModalReprogramarCita({
+  open,
+  cita,          // { id, inicio, box, duracion? }
+  vetId,         // id del veterinario (lo pasaremos desde VetAgendaDia)
+  onClose,
+  onConfirm,     // callback para refrescar estado en la vista padre
+}) {
+  // ---- state y hooks (SIEMPRE se ejecutan, nunca dentro de if) ----
+  const [selectedDate, setSelectedDate] = useState("");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [selectedHour, setSelectedHour] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const cargarCita = async () => {
-    const res = await getCita(id);
-    setCita(res.data);
-    const fechaISO = res.data.fecha.split("T")[0];
-    setFecha(fechaISO);
+  // cuando se abre el modal o cambia la cita
+  useEffect(() => {
+    if (!open || !cita) return;
+
+    const base = cita.inicio?.slice(0, 10) || dayjs().format("YYYY-MM-DD");
+    setSelectedDate(base);
+    setSelectedHour("");
+    setError("");
+
+    // alineamos el weekOffset para que el calendario quede cerca de la fecha
+    const diffDays = dayjs(base).diff(dayjs().startOf("day"), "day");
+    const aligned = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
+    setWeekOffset(aligned);
+  }, [open, cita]);
+
+  // tira de días
+  const upcomingDays = useMemo(() => {
+    const base = dayjs().add(weekOffset, "day");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = base.add(i, "day");
+      return {
+        value: d.format("YYYY-MM-DD"),
+        dia: d.format("DD"),
+        dow: d.format("ddd"),
+      };
+    });
+  }, [weekOffset]);
+
+  const currentMonthLabel = useMemo(
+    () => dayjs().add(weekOffset, "day").format("MMM YYYY"),
+    [weekOffset]
+  );
+
+  const handleWeekNav = (direction) => {
+    setWeekOffset((prev) => {
+      const next = prev + (direction === "next" ? 7 : -7);
+      const base = dayjs().add(next, "day");
+      setSelectedDate(base.format("YYYY-MM-DD"));
+      return next < 0 ? 0 : next;
+    });
   };
 
+  // cargar horarios disponibles para la fecha seleccionada
   useEffect(() => {
-    cargarCita();
-  }, [id]);
+    const loadSlots = async () => {
+      if (!open || !vetId || !selectedDate) return;
 
-  // cada vez que cambie fecha o veterinario, pide disponibilidad
-  useEffect(() => {
-    const fetchDisponibilidad = async () => {
-      if (!fecha || !cita?.veterinario) return;
-  
+      setLoadingSlots(true);
+      setSlots([]);
+      setError("");
+
       try {
-        const res = await getDisponibilidad({
-          fecha,
-          veterinario_id: cita.veterinario.id ?? cita.veterinario, 
-          duracion: cita.duracion || 30,
-          box: cita.box || "BOX-1",
+        const resp = await getDisponibilidad({
+          veterinario_id: vetId,
+          fecha: selectedDate,
+          duracion: cita?.duracion || 30,
+          box: "", // sin filtro por box
         });
-  
-        // adapta según backend: si responde { horas: [...] }
-        setHorasDisponibles(res.data.horas || []);
+        setSlots(resp.data?.slots || []);
       } catch (err) {
-        console.error(err);
-        setHorasDisponibles([]);
+        console.error("Error cargando disponibilidad:", err);
+        setError("No hay horarios disponibles o no se pudo cargar la disponibilidad.");
+      } finally {
+        setLoadingSlots(false);
       }
     };
-  
-    fetchDisponibilidad();
-  }, [fecha, cita]);
-  
+
+    loadSlots();
+  }, [open, vetId, selectedDate, cita]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!horaSeleccionada) return;
-  
-    setLoading(true);
-  
+    if (!cita || !selectedDate || !selectedHour) return;
+
+    setSaving(true);
+    setError("");
     try {
-      const inicio = `${fecha}T${horaSeleccionada}:00`; // "YYYY-MM-DDTHH:MM:SS"
-  
+      const dur = cita.duracion || 30;
+      const inicio = `${selectedDate}T${selectedHour}`;
+
       await reprogramarCita(cita.id, {
         inicio,
-        duracion: cita.duracion || 30,
-        box: cita.box || "BOX-1",
+        duracion: dur,
+        box: cita.box || null,
       });
-  
-      // después de reprogramar, vuelve a la lista de citas del cliente/vet
-      navigate(-1); // o navigate("/cliente/citas") / "/vet/citas" según tu ruta
+
+      // avisamos al padre
+      onConfirm &&
+        onConfirm({
+          id: cita.id,
+          nueva_fecha: selectedDate,
+          nueva_hora: selectedHour,
+        });
+
+      onClose && onClose();
     } catch (err) {
-      console.error(err);
-      alert("No se pudo reprogramar la cita. Intenta nuevamente.");
+      console.error("Error al reprogramar cita:", err);
+      setError("No se pudo reprogramar la cita. Revisa la disponibilidad.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
-  
-  if (!cita) return null;
+
+  // IMPORTANTE: los hooks ya se ejecutaron; AHORA sí podemos decidir no renderizar
+  if (!open || !cita) return null;
 
   return (
-    <div className="max-w-xl mx-auto bg-white rounded-xl shadow p-6">
-      <h1 className="text-xl font-semibold mb-4">Reprogramar cita</h1>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Fecha</label>
-          <input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="border rounded-md px-3 py-2 text-sm w-full"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Horario disponible
-          </label>
-          {horasDisponibles.length === 0 ? (
-            <p className="text-sm text-gray-500">
-              No hay horas disponibles para esta fecha.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border border-slate-200">
+        {/* header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Reprogramar cita #{cita.id}
             </p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {horasDisponibles.map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => setHoraSeleccionada(h)}
-                  className={`px-3 py-1 rounded-full text-sm border ${
-                    horaSeleccionada === h
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-gray-700"
-                  }`}
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-3">
+            <p className="mt-1 text-xs text-slate-500">
+              Fecha actual:{" "}
+              {dayjs(cita.inicio).format("dddd DD [de] MMMM YYYY · HH:mm")}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            className="px-4 py-2 text-sm rounded-md border"
+            onClick={onClose}
+            className="p-1 rounded-full hover:bg-slate-100"
           >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading || !horaSeleccionada}
-            className="px-4 py-2 text-sm rounded-md bg-emerald-600 text-white disabled:opacity-60"
-          >
-            {loading ? "Guardando..." : "Confirmar cambio"}
+            <X className="h-4 w-4 text-slate-500" />
           </button>
         </div>
-      </form>
+
+        {/* body */}
+        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4 text-sm">
+          {/* calendario tipo tira */}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+              <CalendarDays className="h-4 w-4 text-sky-600" />
+              Selecciona una fecha
+            </label>
+
+            <div className="flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => handleWeekNav("prev")}
+                className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <div className="flex flex-col items-center">
+                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  {currentMonthLabel}
+                </span>
+                <div className="flex gap-1 overflow-x-auto pb-1 max-w-xs md:max-w-md">
+                  {upcomingDays.map((d) => (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => setSelectedDate(d.value)}
+                      className={
+                        "flex flex-col items-center min-w-[3rem] px-2 py-1 rounded-lg border text-[11px] " +
+                        (selectedDate === d.value
+                          ? "bg-sky-600 text-white border-sky-600"
+                          : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
+                      }
+                    >
+                      <span className="uppercase tracking-wide text-[10px]">
+                        {d.dow}
+                      </span>
+                      <span className="text-sm font-semibold">{d.dia}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleWeekNav("next")}
+                className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* horarios disponibles */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1 text-xs font-medium text-slate-700">
+              <Clock className="h-3 w-3 text-sky-500" />
+              Horarios disponibles
+            </label>
+
+            {loadingSlots ? (
+              <p className="text-xs text-slate-500">
+                Cargando horarios disponibles...
+              </p>
+            ) : error ? (
+              <p className="text-xs text-rose-500">{error}</p>
+            ) : slots.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No hay horarios disponibles para esta fecha.
+              </p>
+            ) : (
+              <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
+                <p className="text-[11px] text-slate-500 mb-2">
+                  Horarios disponibles para{" "}
+                  <span className="font-semibold">
+                    {dayjs(selectedDate).format("ddd DD MMM YYYY")}
+                  </span>
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  {slots.map((h) => (
+                    <label
+                      key={h}
+                      className={
+                        "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
+                        (selectedHour === h
+                          ? "bg-sky-600 text-white border-sky-600"
+                          : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
+                      }
+                    >
+                      <input
+                        type="radio"
+                        name="hora-reprog"
+                        value={h}
+                        checked={selectedHour === h}
+                        onChange={() => setSelectedHour(h)}
+                        className="hidden"
+                      />
+                      {h}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* footer */}
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cerrar
+            </button>
+            <button
+              type="submit"
+              disabled={!selectedHour || saving}
+              className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+            >
+              {saving ? "Guardando..." : "Confirmar cambio"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -29,30 +29,100 @@ function App() {
       {/* Root → selección */}
       <Route path="/" element={<Navigate to="/seleccion-login" replace />} />
 
-      {/* Públicas */}
+      {/* Selección */}
       <Route path="/seleccion-login" element={<SeleccionLogin />} />
+
+      {/* Registro */}
       <Route path="/registro" element={<Registro />} />
       <Route path="/cuenta-creada" element={<CuentaCreada />} />
+
+      {/* Logins */}
       <Route path="/login/cliente" element={<ClienteLogin />} />
       <Route path="/login/veterinario" element={<VeterinarioLogin />} />
 
-      {/* Rutas CLIENTE protegidas */}
-      <Route element={<ClienteRoute />}>
-        <Route path="/cliente/home" element={<ClienteHome />} />
-        <Route path="/cliente/citas" element={<Citas />} />
-        <Route path="/cliente/mascotas" element={<RegistrarMascotas />} />
-      </Route>
+      {/* Cliente (PROTEGIDAS) */}
+      <Route
+        path="/cliente/home"
+        element={
+          <ClienteRoute>
+            <ClienteHome />
+          </ClienteRoute>
+        }
+      />
+      <Route
+        path="/cliente/citas"
+        element={
+          <ClienteRoute>
+            <Citas />
+          </ClienteRoute>
+        }
+      />
+      <Route
+        path="/cliente/mascotas"
+        element={
+          <ClienteRoute>
+            <RegistrarMascotas />
+          </ClienteRoute>
+        }
+      />
 
-      {/* Rutas VETERINARIO protegidas */}
-      <Route element={<VetRoute />}>
-        <Route path="/veterinario/home" element={<VetHome />} />
-        <Route path="/veterinario/agenda" element={<VetAgenda />} />
-        <Route path="/veterinario/agenda-dia" element={<VetAgendaDia />} />
-        <Route path="/veterinario/citas" element={<VetCitas />} />
-        <Route path="/vet/horarios" element={<VetHorarios />} />
-        <Route path="/veterinario/pacientes" element={<VetPacientes />} />
-        <Route path="/veterinario/paciente/:id" element={<VetFichaClinica />} />
-      </Route>
+      {/* Veterinario (PROTEGIDAS) */}
+      <Route
+        path="/veterinario/home"
+        element={
+          <VetRoute>
+            <VetHome />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/veterinario/agenda"
+        element={
+          <VetRoute>
+            <VetAgenda />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/veterinario/agenda-dia"
+        element={
+          <VetRoute>
+            <VetAgendaDia />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/veterinario/citas"
+        element={
+          <VetRoute>
+            <VetCitas />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/vet/horarios"
+        element={
+          <VetRoute>
+            <VetHorarios />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/veterinario/pacientes"
+        element={
+          <VetRoute>
+            <VetPacientes />
+          </VetRoute>
+        }
+      />
+      <Route
+        path="/veterinario/paciente/:id"
+        element={
+          <VetRoute>
+            <VetFichaClinica />
+          </VetRoute>
+        }
+      />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/seleccion-login" replace />} />

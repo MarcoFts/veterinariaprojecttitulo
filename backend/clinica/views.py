@@ -79,15 +79,26 @@ class MascotaViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        # Partimos del queryset base
         qs = Mascota.objects.all().order_by("-id")
         u = self.request.user
 
-        # Veterinario/Admin ve todas las mascotas
+        # 1) Restringimos por rol
         if user_is_vet(u) or u.is_staff or u.is_superuser:
-            return qs
+            base_qs = qs
+        else:
+            # Cliente normal: solo sus mascotas
+            base_qs = qs.filter(cliente__user=u)
 
-        # Cliente: solo mascotas de su ficha
-        return qs.filter(cliente__user=u)
+        # 2) Filtro opcional por cliente (llega desde el frontend)
+        cliente_id = (
+            self.request.query_params.get("cliente")
+            or self.request.query_params.get("cliente_id")
+        )
+        if cliente_id:
+            base_qs = base_qs.filter(cliente_id=cliente_id)
+
+        return base_qs
 
     def perform_create(self, serializer):
         u = self.request.user

@@ -9,30 +9,21 @@ export const setTokens = ({ access, refresh }) => {
   if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
 };
 
-// Obtener tokens individuales
+// Obtener tokens
 export const getAccessToken = () => localStorage.getItem(ACCESS_KEY);
 export const getRefreshToken = () => localStorage.getItem(REFRESH_KEY);
-
-// Obtener ambos tokens (para AuthContext u otros)
-export const getTokens = () => ({
-  access: getAccessToken(),
-  refresh: getRefreshToken(),
-});
 
 // Compat con código viejo
 export const getToken = getAccessToken;
 export const getRefresh = getRefreshToken;
 
-// ---- LIMPIEZA DE TOKENS ----
+// Logout limpio
 export const clearTokens = () => {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
 };
 
-// Logout limpio (usa clearTokens)
-export const logout = () => {
-  clearTokens();
-};
+export const logout = clearTokens;
 
 // Estado auth simple
 export const isAuthenticated = () => Boolean(getAccessToken());

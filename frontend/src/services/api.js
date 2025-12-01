@@ -114,9 +114,10 @@ export function getCita(id) {
 export function crearCita(payload) {
   return api.post("/citas/", payload);
 }
-export function confirmarCita(id) {
-  return api.patch(`/citas/${id}/confirmar/`);
+export function confirmarCita(id, payload) {
+  return api.patch(`/citas/${id}/confirmar/`, payload);
 }
+
 export function cancelarCita(id) {
   return api.patch(`/citas/${id}/cancelar/`);
 }
@@ -165,6 +166,5 @@ export function crearHorario(data) {
   // data: { dia_semana, hora_inicio, hora_fin }
   return api.post("/horarios/", data);
 }
-
 
 export default api;

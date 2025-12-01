@@ -28,11 +28,23 @@ dayjs.locale("es");
 
 const LABEL_OTRO_MOTIVO = "Otro motivo";
 
+// Duraciones por tipo de motivo (en minutos)
+const DURACION_POR_MOTIVO = {
+  Vacunación: 20,
+  Desparasitación: 20,
+  "Esterilización / castración": 60,
+  "Control general / chequeo sano": 30,
+  "Control anual de rutina": 30,
+  "Control postoperatorio": 25,
+  "Control de enfermedad crónica": 30,
+  "Atención de urgencia": 45,
+};
+
 export default function Citas() {
   const hoy = dayjs().format("YYYY-MM-DD");
 
   const [fecha, setFecha] = useState(hoy);
-  const [weekOffset, setWeekOffset] = useState(0); // desplazamiento de semanas (en días)
+  const [weekOffset, setWeekOffset] = useState(0); // calendario creación
 
   const [motivosPredef, setMotivosPredef] = useState([]);
 
@@ -54,10 +66,9 @@ export default function Citas() {
     veterinario: "",
     fecha: hoy,
     hora: "",
-    duracion: 30, // uso interno
+    duracion: 30, // se ajusta según motivo
     motivo: "", // valor seleccionado del select
     motivoOtro: "", // texto libre si selecciona "Otro motivo"
-    box: "",
   });
 
   // --- Estado para reprogramar ---
@@ -69,6 +80,9 @@ export default function Citas() {
   const [slotSeleccionado, setSlotSeleccionado] = useState("");
   const [savingReprog, setSavingReprog] = useState(false);
 
+  // mini calendario dentro del modal de reprogramar
+  const [reprogWeekOffset, setReprogWeekOffset] = useState(0);
+
   // ---------- Helpers ----------
 
   const citasOrdenadas = useMemo(() => {
@@ -77,7 +91,7 @@ export default function Citas() {
     );
   }, [citasDia]);
 
-  // Próximos 7 días para el “calendario” de la izquierda según weekOffset
+  // Próximos 7 días para el “calendario” de creación (izquierda)
   const upcomingDays = useMemo(() => {
     const base = dayjs().add(weekOffset, "day");
     return Array.from({ length: 7 }, (_, i) => {
@@ -85,7 +99,7 @@ export default function Citas() {
       return {
         value: d.format("YYYY-MM-DD"),
         dia: d.format("DD"),
-        dow: d.format("ddd"), // lu, ma, mi...
+        dow: d.format("ddd"),
       };
     });
   }, [weekOffset]);
@@ -94,12 +108,49 @@ export default function Citas() {
     return dayjs().add(weekOffset, "day").format("MMM YYYY");
   }, [weekOffset]);
 
+  // Mini calendario del modal de reprogramar
+  const upcomingDaysReprog = useMemo(() => {
+    const base = dayjs().add(reprogWeekOffset, "day");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = base.add(i, "day");
+      return {
+        value: d.format("YYYY-MM-DD"),
+        dia: d.format("DD"),
+        dow: d.format("ddd"),
+      };
+    });
+  }, [reprogWeekOffset]);
+
+  const currentMonthLabelReprog = useMemo(
+    () => dayjs().add(reprogWeekOffset, "day").format("MMM YYYY"),
+    [reprogWeekOffset]
+  );
+
   const handleChangeForm = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
       [name]: value,
     }));
+  };
+
+  // cuando cambia el motivo, ajustamos duración
+  const handleMotivoChange = (e) => {
+    const value = e.target.value;
+    const duracionBase = DURACION_POR_MOTIVO[value] || 30;
+
+    const nuevoForm = {
+      ...form,
+      motivo: value,
+      duracion: duracionBase,
+    };
+
+    setForm(nuevoForm);
+
+    // si ya hay vet + fecha, recargar slots con nueva duración
+    if (nuevoForm.veterinario && nuevoForm.fecha) {
+      cargarSlotsCrear(nuevoForm);
+    }
   };
 
   // ---------- Cargar datos base (vets, mascotas, citas) ----------
@@ -140,16 +191,12 @@ export default function Citas() {
         (m) => (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
       );
       if (!tieneOtro) {
-        base = [
-          ...base,
-          { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO },
-        ];
+        base = [...base, { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO }];
       }
 
       setMotivosPredef(base);
     } catch (err) {
       console.error("Error cargando motivos de consulta:", err);
-      // si falla, simplemente dejamos el arreglo vacío
     }
   };
 
@@ -174,7 +221,7 @@ export default function Citas() {
         veterinario_id: f.veterinario,
         fecha: f.fecha,
         duracion: f.duracion || 30,
-        box: f.box || "",
+        box: "", // el box lo gestionará el vet, no el cliente
       });
       setSlots(resp.data?.slots || []);
     } catch (err) {
@@ -199,7 +246,7 @@ export default function Citas() {
     }
   };
 
-  // selección desde el calendario de chips de días
+  // selección desde el calendario de chips de días (creación)
   const handleSelectDia = async (dateValue) => {
     const nuevoForm = {
       ...form,
@@ -207,20 +254,16 @@ export default function Citas() {
       hora: "",
     };
     setForm(nuevoForm);
-    setFecha(dateValue); // sincroniza la agenda del día de la derecha
+    setFecha(dateValue);
     if (nuevoForm.veterinario) {
       await cargarSlotsCrear(nuevoForm);
     }
   };
 
-  // navegar semanas con flechas
+  // navegar semanas con flechas (creación)
   const handleWeekNav = async (direction) => {
     let nextOffset = direction === "next" ? weekOffset + 7 : weekOffset - 7;
-
-    // no permitimos ir a antes de hoy
-    if (nextOffset < 0) {
-      nextOffset = 0;
-    }
+    if (nextOffset < 0) nextOffset = 0;
 
     const base = dayjs().add(nextOffset, "day");
     const newDate = base.format("YYYY-MM-DD");
@@ -252,7 +295,6 @@ export default function Citas() {
     };
     setForm(nuevoForm);
 
-    // ajustamos weekOffset para que el calendario se mueva cerca de esa fecha
     const diffDays = dayjs(val).diff(dayjs().startOf("day"), "day");
     const alignedOffset = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
     setWeekOffset(alignedOffset);
@@ -273,34 +315,34 @@ export default function Citas() {
       return;
     }
 
+    // Motivo obligatorio
+    if (!form.motivo) {
+      alert("Debes seleccionar un motivo de consulta.");
+      return;
+    }
+
     // Si seleccionó "Otro motivo", exigimos que escriba el texto
-    if (
-      form.motivo === LABEL_OTRO_MOTIVO &&
-      !form.motivoOtro.trim()
-    ) {
+    if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
       alert("Por favor escribe el motivo de la consulta.");
       return;
     }
 
     const inicio = `${form.fecha}T${form.hora}`;
     const durMin = Number(form.duracion || 30);
-    const fin = dayjs(inicio)
-      .add(durMin, "minute")
-      .format("YYYY-MM-DDTHH:mm");
+    const fin = dayjs(inicio).add(durMin, "minute").format("YYYY-MM-DDTHH:mm");
 
-    // motivo final: si es "Otro motivo", usamos el texto libre
     const motivoFinal =
       form.motivo === LABEL_OTRO_MOTIVO
         ? form.motivoOtro.trim()
         : form.motivo || "";
 
+    // NO enviamos box: el vet/ backend se encargan
     const payload = {
       mascota: form.mascota,
       veterinario: form.veterinario,
       inicio,
       fin,
       motivo: motivoFinal,
-      box: form.box || "",
     };
 
     setLoadingForm(true);
@@ -351,17 +393,13 @@ export default function Citas() {
     setSlotsReprog([]);
     try {
       const dur = calcularDuracionCita(cita);
-
-      // Aseguramos el id del vet
       const vetId = cita.veterinario_id || cita.veterinario;
 
       const resp = await getDisponibilidad({
         veterinario_id: vetId,
         fecha: fechaReprog,
         duracion: dur,
-        // IMPORTANTE: por ahora NO filtramos por box,
-        // porque los horarios del vet no tienen box definido.
-        box: "",
+        box: "", // box se mantiene en la cita, no en la disponibilidad
       });
 
       setSlotsReprog(resp.data?.slots || []);
@@ -379,14 +417,40 @@ export default function Citas() {
     setSlotSeleccionado("");
     setSlotsReprog([]);
     setShowModal(true);
+
+    // alineamos el mini calendario del modal a la fecha de la cita
+    const diffDays = dayjs(fechaActual).diff(dayjs().startOf("day"), "day");
+    const baseOffset = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
+    setReprogWeekOffset(baseOffset);
+
     await cargarSlotsReprogramar(cita, fechaActual);
   };
 
-  const handleFechaReprogChange = async (e) => {
-    const nueva = e.target.value;
-    setNuevaFecha(nueva);
+  // navegación semana modal
+  const handleReprogWeekNav = async (direction) => {
+    let nextOffset =
+      direction === "next" ? reprogWeekOffset + 7 : reprogWeekOffset - 7;
+    if (nextOffset < 0) nextOffset = 0;
+
+    const base = dayjs().add(nextOffset, "day");
+    const newDate = base.format("YYYY-MM-DD");
+
+    setReprogWeekOffset(nextOffset);
+    setNuevaFecha(newDate);
     setSlotSeleccionado("");
-    await cargarSlotsReprogramar(selectedCita, nueva);
+
+    if (selectedCita) {
+      await cargarSlotsReprogramar(selectedCita, newDate);
+    }
+  };
+
+  // seleccionar día en modal
+  const handleSelectDiaReprog = async (dateValue) => {
+    setNuevaFecha(dateValue);
+    setSlotSeleccionado("");
+    if (selectedCita) {
+      await cargarSlotsReprogramar(selectedCita, dateValue);
+    }
   };
 
   const handleSubmitReprogramar = async (e) => {
@@ -400,7 +464,7 @@ export default function Citas() {
       await reprogramarCita(selectedCita.id, {
         inicio,
         duracion: calcularDuracionCita(selectedCita),
-        box: selectedCita.box || "",
+        box: selectedCita.box || "", // respetamos el box que ya tenga la cita
       });
       setShowModal(false);
       setSelectedCita(null);
@@ -413,6 +477,30 @@ export default function Citas() {
     }
   };
 
+  // estilos del chip de estado
+  const getEstadoStyles = (estado) => {
+    switch ((estado || "").toLowerCase()) {
+      case "cancelada":
+        return "bg-red-100 text-red-700";
+      case "confirmada":
+        return "bg-emerald-100 text-emerald-700";
+      case "atendida":
+      case "completada":
+        return "bg-emerald-100 text-emerald-700";
+      case "no_asistida":
+      case "no asistida":
+        return "bg-amber-100 text-amber-700";
+      case "pendiente":
+      default:
+        return "bg-sky-100 text-sky-700";
+    }
+  };
+
+  const duracionTexto =
+    form.motivo && DURACION_POR_MOTIVO[form.motivo]
+      ? `${DURACION_POR_MOTIVO[form.motivo]} minutos aprox.`
+      : "—";
+
   // ---------- Render ----------
 
   return (
@@ -422,7 +510,7 @@ export default function Citas() {
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Cliente
+              VETCARE · CLIENTE
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
               Agenda tus citas
@@ -434,9 +522,7 @@ export default function Citas() {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700">
-              Fecha:
-            </label>
+            <label className="text-sm font-medium text-slate-700">Fecha:</label>
             <input
               type="date"
               value={fecha}
@@ -506,8 +592,7 @@ export default function Citas() {
                   {veterinarios.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.nombre ||
-                        `${(v.first_name || "")} ${(v.last_name || "")}`
-                          .trim() ||
+                        `${(v.first_name || "")} ${(v.last_name || "")}`.trim() ||
                         v.email ||
                         `Veterinario #${v.id}`}
                     </option>
@@ -515,7 +600,7 @@ export default function Citas() {
                 </select>
               </div>
 
-              {/* Fecha (calendario de días) + Box */}
+              {/* Fecha (calendario de días) */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-slate-600">
                   Fecha
@@ -564,52 +649,34 @@ export default function Citas() {
                     </button>
                   ))}
                 </div>
-
-                {/* Box */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Box (opcional)
-                  </label>
-                  <input
-                    type="text"
-                    name="box"
-                    value={form.box}
-                    onChange={handleChangeForm}
-                    placeholder="Box 1, Box 2..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  />
-                </div>
               </div>
 
               {/* Motivo (select + input cuando es "Otro motivo") */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">
-                  Motivo de consulta (opcional)
+                  Motivo de consulta
                 </label>
                 {motivosPredef.length === 0 ? (
                   <select
                     name="motivo"
                     value={form.motivo}
-                    onChange={handleChangeForm}
+                    onChange={handleMotivoChange}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                   >
                     <option value="">
-                      No se pudieron cargar los motivos. (opcional)
+                      No se pudieron cargar los motivos. Intenta más tarde.
                     </option>
                   </select>
                 ) : (
                   <select
                     name="motivo"
                     value={form.motivo}
-                    onChange={handleChangeForm}
+                    onChange={handleMotivoChange}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                   >
                     <option value="">Selecciona un motivo</option>
                     {motivosPredef.map((m) => (
-                      <option
-                        key={m.codigo || m.nombre}
-                        value={m.nombre}
-                      >
+                      <option key={m.codigo || m.nombre} value={m.nombre}>
                         {m.nombre}
                       </option>
                     ))}
@@ -627,6 +694,12 @@ export default function Citas() {
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 mt-2"
                   />
                 )}
+
+                {/* Duración estimada */}
+                <p className="text-[11px] text-slate-500">
+                  La duración estimada para este motivo es de{" "}
+                  <span className="font-semibold">{duracionTexto}</span>.
+                </p>
               </div>
 
               {/* Horarios disponibles */}
@@ -666,7 +739,6 @@ export default function Citas() {
                       </span>
                     </p>
 
-                    {/* Aquí eliges la hora, como en la foto */}
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
                       {slots.map((h) => (
                         <label
@@ -686,7 +758,7 @@ export default function Citas() {
                             onChange={() =>
                               setForm((prev) => ({
                                 ...prev,
-                                hora: h, // LA HORA VIENE DEL BACKEND
+                                hora: h,
                               }))
                             }
                             className="hidden"
@@ -749,18 +821,17 @@ export default function Citas() {
                       </div>
                       <div>
                         <p className="font-medium text-slate-800">
-                          {cita.mascota_nombre ||
-                            `Mascota #${cita.mascota}`}
+                          {cita.mascota_nombre || `Mascota #${cita.mascota}`}
                         </p>
                         <p className="text-xs text-slate-600">
                           Vet:{" "}
                           <span className="font-medium">
                             {cita.veterinario_nombre ||
                               `Veterinario #${cita.veterinario}`}
-                          </span>{" "}
-                          · Box:{" "}
+                          </span>
+                          {" · "}
                           <span className="font-mono text-[11px]">
-                            {cita.box || "N/A"}
+                            Box: {cita.box || "N/A"}
                           </span>
                         </p>
                         {cita.motivo && (
@@ -772,23 +843,34 @@ export default function Citas() {
                     </div>
 
                     <div className="flex items-center gap-2 md:justify-end">
-                      <span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[11px] px-2 py-1">
-                        {cita.estado || "Pendiente"}
+                      <span
+                        className={
+                          "inline-flex items-center rounded-full text-[11px] px-2 py-1 " +
+                          getEstadoStyles(cita.estado)
+                        }
+                      >
+                        {cita.estado || "pendiente"}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => abrirModalReprogramar(cita)}
-                        className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-700"
-                      >
-                        Reprogramar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCancelarCita(cita.id)}
-                        className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Cancelar
-                      </button>
+
+                      {/* Si la cita está cancelada, NO mostramos botones */}
+                      {String(cita.estado).toLowerCase() !== "cancelada" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => abrirModalReprogramar(cita)}
+                            className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-700"
+                          >
+                            Reprogramar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelarCita(cita.id)}
+                            className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -806,16 +888,53 @@ export default function Citas() {
               </h3>
 
               <form onSubmit={handleSubmitReprogramar} className="space-y-4">
-                <div className="space-y-1">
+                {/* Mini calendario como en el panel izquierdo */}
+                <div className="space-y-2">
                   <label className="block text-xs font-medium text-slate-700">
                     Nueva fecha
                   </label>
-                  <input
-                    type="date"
-                    value={nuevaFecha}
-                    onChange={handleFechaReprogChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  />
+
+                  <div className="flex items-center justify-between mb-1">
+                    <button
+                      type="button"
+                      onClick={() => handleReprogWeekNav("prev")}
+                      disabled={reprogWeekOffset === 0}
+                      className="p-1 rounded-full border border-slate-300 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+                      {currentMonthLabelReprog}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleReprogWeekNav("next")}
+                      className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {upcomingDaysReprog.map((d) => (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => handleSelectDiaReprog(d.value)}
+                        className={
+                          "flex flex-col items-center min-w-[3rem] px-2 py-1 rounded-lg border text-[11px] " +
+                          (nuevaFecha === d.value
+                            ? "bg-sky-600 text-white border-sky-600"
+                            : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
+                        }
+                      >
+                        <span className="uppercase tracking-wide text-[10px]">
+                          {d.dow}
+                        </span>
+                        <span className="text-sm font-semibold">{d.dia}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -839,7 +958,6 @@ export default function Citas() {
                         </span>
                       </p>
 
-                      {/* selector de hora estilo grilla, similar a la referencia */}
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                         {slotsReprog.map((h) => (
                           <label

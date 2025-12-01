@@ -1,88 +1,148 @@
 // src/components/agenda/SlotCard.jsx
-import { Clock, User, PawPrint, XCircle, RefreshCw, PlusCircle } from "lucide-react";
+import { CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export default function SlotCard({
   slot,
   onAsignar,
+  onConfirm,
   onReprogramar,
   onCancelar,
 }) {
-  const { horaInicio, horaFin, estado, paciente, mascota } = slot;
+  const { horaInicio, horaFin, estado, estadoCita, paciente, mascota, box } =
+    slot;
 
-  const isLibre = estado === "libre";
-  const isOcupada = estado === "ocupada";
-  const isCancelada = estado === "cancelada";
-
-  let baseClasses =
-    "w-full flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm transition-all duration-150";
+  // estilos según estado principal (libre/ocupada/cancelada)
+  const baseClasses =
+    "flex items-center justify-between rounded-xl border px-4 py-3 text-sm";
   let stateClasses = "";
-
-  if (isLibre) {
-    stateClasses = "bg-white border-sky-100 hover:shadow-sm";
-  } else if (isOcupada) {
-    stateClasses = "bg-emerald-50 border-emerald-200";
-  } else if (isCancelada) {
-    stateClasses = "bg-rose-50 border-rose-200 opacity-70";
+  if (estado === "libre") {
+    stateClasses =
+      "border-slate-200 bg-slate-50 hover:bg-slate-100 transition";
+  } else if (estado === "cancelada") {
+    stateClasses = "border-rose-100 bg-rose-50";
+  } else {
+    // ocupada (pendiente o confirmada)
+    stateClasses = "border-emerald-100 bg-emerald-50";
   }
+
+  const isPendiente = estado === "ocupada" && estadoCita !== "confirmada";
+  const isConfirmada = estado === "ocupada" && estadoCita === "confirmada";
 
   return (
     <div className={`${baseClasses} ${stateClasses}`}>
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center">
-          <Clock size={18} className="text-slate-700" />
+      {/* IZQUIERDA: info */}
+      <div className="flex items-start gap-3">
+        <div className="mt-1">
+          {estado === "cancelada" ? (
+            <XCircle className="h-4 w-4 text-rose-500" />
+          ) : (
+            <Clock className="h-4 w-4 text-slate-500" />
+          )}
         </div>
-        <div className="flex flex-col">
-          <span className="font-semibold text-slate-800">
+
+        <div>
+          <p className="font-semibold text-slate-900">
             {horaInicio} - {horaFin}
-          </span>
-          <span className="text-xs text-slate-500 capitalize">
-            {estado}
-            {isOcupada && paciente
-              ? ` · ${paciente}${mascota ? ` · ${mascota}` : ""}`
-              : null}
-          </span>
+          </p>
+
+          {estado === "libre" && (
+            <p className="text-xs text-slate-500">Horario libre</p>
+          )}
+
+          {estado !== "libre" && (
+            <>
+              <p className="text-xs text-slate-600">
+                {paciente && (
+                  <>
+                    Paciente: <span className="font-medium">{paciente}</span>
+                    {mascota && ` · ${mascota}`}
+                  </>
+                )}
+              </p>
+
+              {box && (
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Sala / Box: <span className="font-mono">{box}</span>
+                </p>
+              )}
+            </>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {isLibre && (
-          <button
-            type="button"
-            onClick={onAsignar}
-            className="inline-flex items-center gap-1 rounded-lg bg-sky-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-600"
-          >
-            <PlusCircle size={14} />
-            Asignar
-          </button>
+      {/* DERECHA: estado y acciones */}
+      <div className="flex flex-col items-end gap-2">
+        {/* etiqueta de estado */}
+        {estado === "libre" && (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+            Libre
+          </span>
         )}
 
-        {isOcupada && (
-          <>
-            <button
-              type="button"
-              onClick={onReprogramar}
-              className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
-            >
-              <RefreshCw size={14} />
-              Reprogramar
-            </button>
-            <button
-              type="button"
-              onClick={onCancelar}
-              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100"
-            >
-              <XCircle size={14} />
-              Cancelar
-            </button>
-          </>
-        )}
-
-        {isCancelada && (
-          <span className="text-[11px] text-rose-500 flex items-center gap-1">
-            <XCircle size={14} />
+        {estado === "cancelada" && (
+          <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[11px] text-rose-700">
             Cancelada
           </span>
         )}
+
+        {estado === "ocupada" && (
+          <span
+            className={
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] " +
+              (isConfirmada
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-700")
+            }
+          >
+            {isConfirmada ? (
+              <>
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Confirmada
+              </>
+            ) : (
+              "Pendiente"
+            )}
+          </span>
+        )}
+
+        {/* botones */}
+        <div className="flex flex-wrap justify-end gap-2 mt-1">
+          {estado === "libre" && onAsignar && (
+            <button
+              onClick={onAsignar}
+              className="rounded-lg border border-sky-500 px-3 py-1 text-[11px] font-semibold text-sky-600 hover:bg-sky-50"
+            >
+              Asignar cita
+            </button>
+          )}
+
+          {estado === "ocupada" && isPendiente && onConfirm && (
+            <button
+              onClick={onConfirm}
+              className="rounded-lg bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-600"
+            >
+              Confirmar
+            </button>
+          )}
+
+          {estado === "ocupada" && onReprogramar && (
+            <button
+              onClick={onReprogramar}
+              className="rounded-lg bg-sky-500 px-3 py-1 text-[11px] font-semibold text-white hover:bg-sky-600"
+            >
+              Reprogramar
+            </button>
+          )}
+
+          {estado !== "libre" && estado !== "cancelada" && onCancelar && (
+            <button
+              onClick={onCancelar}
+              className="rounded-lg border border-rose-200 px-3 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

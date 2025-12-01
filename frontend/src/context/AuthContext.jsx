@@ -1,27 +1,17 @@
 // src/context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect } from "react";
-import { getTokens, clearTokens } from "../auth";
+import { createContext, useContext, useEffect, useState } from "react";
+import api from "../services/api";
+import { getAccessToken, setTokens, clearTokens } from "../auth";
 
-const AuthContext = createContext({
-  user: null,
-  login: () => {},
-  logout: () => {},
-});
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Al montar, sólo comprobamos si hay token; si no hay, dejamos user en null.
-  useEffect(() => {
-    const tokens = getTokens();
-    if (!tokens?.access) {
-      setUser(null);
-    }
-    // Si quieres, aquí podrías llamar /auth/me/ para hidratar el usuario al recargar.
-  }, []);
-
-  // Se usa en ClienteLogin / VeterinarioLogin
-  const login = (userData) => {
+  // login() se usará desde los formularios
+  const login = (userData, access, refresh) => {
+    if (access) setTokens({ access, refresh });
     setUser(userData);
   };
 
@@ -30,13 +20,42 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Al montar la app, si hay token, preguntamos /auth/me/
+  useEffect(() => {
+    const init = async () => {
+      const token = getAccessToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data } = await api.get("/auth/me/");
+        // Ajusta según lo que devuelve tu backend (ya lo vimos en tu views.py)
+        setUser({
+          id: data.id,
+          email: data.email,
+          name: data.name,
+          is_vet: data.is_vet,
+          is_staff: data.is_staff,
+          cliente_id: data.cliente_id,
+        });
+      } catch (err) {
+        console.error("Error al recuperar sesión:", err);
+        clearTokens();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    init();
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export const useAuth = () => useContext(AuthContext);

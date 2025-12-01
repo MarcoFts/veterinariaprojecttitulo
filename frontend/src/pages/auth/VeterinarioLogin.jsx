@@ -1,13 +1,13 @@
 // src/pages/auth/VeterinarioLogin.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { setTokens, logout } from "../../auth"; // auth helpers
-import api from "../../services/api"; // axios instance
+import { setTokens, logout } from "../../auth";
+import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 
 export default function VeterinarioLogin() {
   const navigate = useNavigate();
-  const { login: setAuthUser } = useAuth(); // desde AuthContext
+  const { login: setAuthUser } = useAuth();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export default function VeterinarioLogin() {
     setLoading(true);
 
     try {
-      // 1) Login real
+      // 1) Login contra el backend
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
@@ -42,47 +42,41 @@ export default function VeterinarioLogin() {
       // 2) Guardar tokens
       setTokens({ access: data.access, refresh: data.refresh });
 
-      // 3) Traer usuario para validar rol
+      // 3) Obtener perfil /auth/me/
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
+      console.log("Respuesta /auth/me/ (vet):", me);
 
       const esVeterinario =
         me?.is_vet === true ||
         me?.is_veterinario === true ||
-        me?.is_staff === true;
+        me?.is_staff === true ||
+        me?.is_superuser === true;
 
       if (!esVeterinario) {
-        // Limpia tokens si no es vet
+        // no tiene rol de vet → limpiamos sesión
         logout();
         setError("Esta cuenta no tiene permiso de veterinario.");
         setLoading(false);
         return;
       }
 
-      // 4) Guardar usuario en AuthContext
+      // 4) Guardar usuario en el AuthContext
       const userParaContexto = {
+        id: me.id,
+        email: me.email || form.email,
+        nombre: me.name || `${me.first_name || ""} ${me.last_name || ""}`.trim(),
         rol: "veterinario",
-        email: me?.email || form.email,
-        first_name: me?.first_name ?? me?.nombre ?? "",
-        last_name: me?.last_name ?? me?.apellido ?? "",
-        clinica_nombre:
-          me?.clinica_nombre || me?.clinic_name || "Clínica Veterinaria",
-        clinica_direccion: me?.clinica_direccion || me?.direccion || "",
-        telefono: me?.telefono || me?.phone || "",
-        numero_registro:
-          me?.numero_registro ||
-          me?.registro_colegio ||
-          me?.n_registro ||
-          "",
-        raw: me,
+        is_vet: me.is_vet,
+        is_staff: me.is_staff,
       };
 
-      // tokens ya se guardaron con setTokens
-      setAuthUser(userParaContexto);
+      setAuthUser(userParaContexto, data.access);
 
-      // 5) Redirigir
+      // 5) Navegar al home del veterinario
       navigate("/veterinario/home", { replace: true });
     } catch (err) {
+      console.error("Error en login veterinario:", err?.response?.data || err);
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||
@@ -130,6 +124,7 @@ export default function VeterinarioLogin() {
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               value={form.email}
               onChange={handleChange}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
@@ -151,6 +146,7 @@ export default function VeterinarioLogin() {
               id="password"
               name="password"
               type="password"
+              autoComplete="current-password"
               value={form.password}
               onChange={handleChange}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 

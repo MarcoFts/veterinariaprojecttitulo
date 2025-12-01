@@ -23,7 +23,10 @@ class MascotaSerializer(serializers.ModelSerializer):
     dueno_nombre = serializers.SerializerMethodField()
     dueno_telefono = serializers.SerializerMethodField()
     dueno_rut = serializers.SerializerMethodField()
-
+    # Campos útiles para el frontend
+    cliente_id = serializers.IntegerField(source="cliente.id", read_only=True)
+    cliente_nombre = serializers.SerializerMethodField()
+    
     class Meta:
         model = Mascota
         exclude = ("cliente",)
@@ -51,6 +54,10 @@ class MascotaSerializer(serializers.ModelSerializer):
         if not cliente:
             return None
         return getattr(cliente, "rut_dni", None)
+
+    def get_cliente_nombre(self, obj):
+        # Reutilizamos la misma lógica del nombre del dueño
+        return self.get_dueno_nombre(obj)
 
 
 class ClienteSerializer(serializers.ModelSerializer):
