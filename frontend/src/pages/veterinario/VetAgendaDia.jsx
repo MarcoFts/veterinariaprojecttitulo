@@ -629,51 +629,51 @@ export default function VetAgendaDia() {
                                       {slot.motivo ||
                                         "Sin motivo registrado"}
                                     </p>
-                                    <div className="flex justify-end gap-1 mt-1">
-                                      {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
-                                      {slot.estado !== "cancelada" &&
-                                        slot.estadoCita !==
-                                          "confirmada" && (
-                                          <button
-                                            type="button"
-                                            className="rounded-md bg-emerald-500 px-2 py-[3px] text-[9px] font-semibold text-white hover:bg-emerald-600"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              abrirConfirmar(slot);
-                                            }}
-                                          >
-                                            Confirmar
-                                          </button>
-                                        )}
+                                   <div className="flex flex-wrap justify-start gap-1 mt-2">
+                                        {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
+                                        {slot.estado !== "cancelada" &&
+                                          slot.estadoCita !== "confirmada" && (
+                                            <button
+                                              type="button"
+                                              className="min-w-[90px] text-left rounded-md bg-emerald-500 px-2 py-[4px] text-[10px] font-semibold text-white hover:bg-emerald-600 whitespace-nowrap"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                abrirConfirmar(slot);
+                                              }}
+                                            >
+                                              Confirmar
+                                            </button>
+                                          )}
 
-                                      {/* Reprogramar */}
-                                      <button
-                                        type="button"
-                                        className="rounded-md bg-white/70 px-2 py-[3px] text-[9px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (!slot.citaId) return;
-                                          setCitaParaReprogramar({
-                                            id: slot.citaId,
-                                            inicio: `${slot.fecha}T${slot.horaInicio}`,
-                                            box: slot.box || "",
-                                          });
-                                        }}
-                                      >
-                                        Reprogramar
-                                      </button>
+                                        {/* Reprogramar */}
+                                        <button
+                                          type="button"
+                                          className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50 whitespace-nowrap"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!slot.citaId) return;
+                                            setCitaParaReprogramar({
+                                              id: slot.citaId,
+                                              inicio: `${slot.fecha}T${slot.horaInicio}`,
+                                              box: slot.box || "",
+                                            });
+                                          }}
+                                        >
+                                          Reprogramar
+                                        </button>
 
-                                      {/* Cancelar */}
-                                      <button
-                                        type="button"
-                                        className="rounded-md bg-white/70 px-2 py-[3px] text-[9px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCancelarSlot(slot.id);
-                                        }}
-                                      >
-                                        Cancelar
-                                      </button>
+                                        {/* Cancelar */}
+                                        <button
+                                          type="button"
+                                          className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50 whitespace-nowrap"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCancelarSlot(slot.id);
+                                          }}
+                                        >
+                                          Cancelar
+                                        </button>
+
                                     </div>
                                   </div>
                                 )}
