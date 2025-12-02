@@ -171,14 +171,6 @@ export default function RegistrarMascota() {
               llevar su historial.
             </p>
           </div>
-
-          <div className="hidden md:flex items-center gap-3 text-xs text-slate-500 bg-white/70 backdrop-blur-md rounded-xl px-4 py-2 shadow-sm border border-slate-100">
-            <ShieldCheck size={16} className="text-sky-500" />
-            <span>
-              Los datos se vincularán a tu cuenta cuando el backend esté
-              conectado.
-            </span>
-          </div>
         </header>
 
         {/* Formulario */}

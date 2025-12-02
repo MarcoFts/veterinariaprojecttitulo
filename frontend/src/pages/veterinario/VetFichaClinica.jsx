@@ -108,7 +108,7 @@ export default function VetFichaClinica() {
     }
   };
 
-  // --- Helpers para Vacunas y Antiparasitarios ---
+  // --- Helpers para Vacunas / Antiparasitarios / Medicamentos en viñetas ---
 
   const registrosVacunas = registros.filter((r) =>
     (r.medicamentos || "").toLowerCase().includes("vacuna:")
@@ -128,6 +128,16 @@ export default function VetFichaClinica() {
     return linea;
   };
 
+  // transforma "Vacuna: X | Marca: Y | Detalles: Z" en:
+  // • Vacuna: X
+  // • Marca: Y
+  // • Detalles: Z
+  const formatearEnViñetas = (texto) => {
+    if (!texto) return "";
+    const limpio = texto.replace(/\s*\|\s*/g, "\n• ");
+    return "• " + limpio;
+  };
+
   const abrirReceta = (reg) => {
     setRegistroSeleccionado(reg);
     setOpenReceta(true);
@@ -139,30 +149,46 @@ export default function VetFichaClinica() {
     if (tab === "datos") {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Datos del paciente
-          </h3>
-          <div className="grid md:grid-cols-2 gap-4 text-sm text-slate-700">
-            <p>
-              <span className="font-semibold">Especie:</span>{" "}
-              {especie || "No registrada"}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">
+              Datos del paciente
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Información básica para la identificación del paciente.
             </p>
-            <p>
-              <span className="font-semibold">Raza:</span>{" "}
-              {raza || "No registrada"}
-            </p>
-            <p>
-              <span className="font-semibold">Sexo:</span>{" "}
-              {sexo || "No registrado"}
-            </p>
-            <p>
-              <span className="font-semibold">¿Esterilizado?</span>{" "}
-              {esterilizado}
-            </p>
-            <p>
-              <span className="font-semibold">Fecha de nacimiento:</span>{" "}
-              {formatFecha(fechaNacimiento)}
-            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4 text-sm text-slate-700 leading-relaxed">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Especie
+              </p>
+              <p>{especie || "No registrada"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Raza
+              </p>
+              <p>{raza || "No registrada"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Sexo
+              </p>
+              <p>{sexo || "No registrado"}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                ¿Esterilizado?
+              </p>
+              <p>{esterilizado}</p>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-500">
+                Fecha de nacimiento
+              </p>
+              <p>{formatFecha(fechaNacimiento)}</p>
+            </div>
           </div>
         </div>
       );
@@ -171,10 +197,16 @@ export default function VetFichaClinica() {
     if (tab === "clinico") {
       return (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-slate-900">
-              Historial clínico
-            </h3>
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Historial clínico
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-xl leading-relaxed">
+                Registros de consultas, diagnósticos, tratamientos y evolución
+                ordenados cronológicamente.
+              </p>
+            </div>
             <button
               onClick={() => setOpenModal(true)}
               className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
@@ -197,7 +229,8 @@ export default function VetFichaClinica() {
                   <div className="absolute -left-[10px] top-1 h-4 w-4 rounded-full bg-sky-600 shadow shadow-sky-600/30" />
 
                   <div className="bg-slate-50 hover:bg-white transition rounded-2xl p-5 border border-slate-200 shadow-sm">
-                    <div className="flex items-center justify-between gap-2 text-sm">
+                    {/* Cabecera fecha + receta */}
+                    <div className="flex items-center justify-between gap-2 text-sm mb-3">
                       <div className="flex items-center gap-2 text-sky-700 font-semibold">
                         <Calendar className="h-4 w-4" />
                         {formatFecha(item.fecha)}
@@ -215,80 +248,73 @@ export default function VetFichaClinica() {
                       )}
                     </div>
 
-                    {item.motivo_consulta && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Motivo de la consulta:
-                        </p>
-                        <p className="text-slate-700 text-sm">
-                          {item.motivo_consulta}
-                        </p>
-                      </>
-                    )}
+                    {/* Contenido en 2 columnas bien separado */}
+                    <div className="grid md:grid-cols-2 gap-x-10 gap-y-4 text-sm leading-relaxed text-slate-800">
+                      {item.motivo_consulta && (
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Motivo de la consulta
+                          </p>
+                          <p>{item.motivo_consulta}</p>
+                        </div>
+                      )}
 
-                    {item.diagnostico && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Diagnóstico:
-                        </p>
-                        <p className="text-slate-700 text-sm">
-                          {item.diagnostico}
-                        </p>
-                      </>
-                    )}
+                      {item.diagnostico && (
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Diagnóstico
+                          </p>
+                          <p>{item.diagnostico}</p>
+                        </div>
+                      )}
 
-                    {item.procedimientos && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Procedimientos:
-                        </p>
-                        <p className="text-slate-700 text-sm">
-                          {item.procedimientos}
-                        </p>
-                      </>
-                    )}
+                      {item.procedimientos && (
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Procedimientos
+                          </p>
+                          <p>{item.procedimientos}</p>
+                        </div>
+                      )}
 
-                    {item.tratamientos && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Tratamientos:
-                        </p>
-                        <p className="text-slate-700 text-sm">
-                          {item.tratamientos}
-                        </p>
-                      </>
-                    )}
+                      {item.tratamientos && (
+                        <div className="space-y-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Tratamientos
+                          </p>
+                          <p>{item.tratamientos}</p>
+                        </div>
+                      )}
 
-                    {item.medicamentos && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Medicamentos:
-                        </p>
-                        <p className="text-slate-700 text-sm whitespace-pre-line">
-                          {item.medicamentos}
-                        </p>
-                      </>
-                    )}
+                      {item.medicamentos && (
+                        <div className="space-y-1 md:col-span-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Medicamentos
+                          </p>
+                          <p className="whitespace-pre-line">
+                            {formatearEnViñetas(item.medicamentos)}
+                          </p>
+                        </div>
+                      )}
 
-                    {item.evolucion && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Evolución:
-                        </p>
-                        <p className="text-slate-700 text-sm">
-                          {item.evolucion}
-                        </p>
-                      </>
-                    )}
+                      {item.evolucion && (
+                        <div className="space-y-1 md:col-span-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Evolución
+                          </p>
+                          <p>{item.evolucion}</p>
+                        </div>
+                      )}
 
-                    {item.notas && (
-                      <>
-                        <p className="font-semibold text-slate-900 mt-2">
-                          Notas:
-                        </p>
-                        <p className="text-slate-700 text-sm">{item.notas}</p>
-                      </>
-                    )}
+                      {item.notas && (
+                        <div className="space-y-1 md:col-span-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Notas
+                          </p>
+                          <p>{item.notas}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -301,7 +327,14 @@ export default function VetFichaClinica() {
     if (tab === "vacunas") {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900">Vacunas</h3>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Vacunas</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Resumen de dosis administradas y recordatorios de refuerzo para el
+              paciente.
+            </p>
+          </div>
+
           {registrosVacunas.length === 0 ? (
             <p className="text-sm text-slate-500">
               No hay vacunas registradas aún para esta mascota.
@@ -314,19 +347,27 @@ export default function VetFichaClinica() {
                   className="border border-purple-200 bg-purple-50 rounded-2xl p-4"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-[0.15em]">
+                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-[0.18em]">
                       Vacuna
                     </span>
                     <span className="text-xs text-slate-500">
                       {formatFecha(reg.fecha)}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-800 font-medium">
-                    {extraerLinea(reg.medicamentos, "vacuna")}
+
+                  <p className="text-xs text-slate-500 mb-1">
+                    Detalle de la administración:
                   </p>
+
+                  <div className="text-sm text-slate-800 whitespace-pre-line leading-relaxed">
+                    {formatearEnViñetas(
+                      extraerLinea(reg.medicamentos, "vacuna")
+                    )}
+                  </div>
+
                   {reg.notas && (
-                    <p className="text-xs text-slate-600 mt-2">
-                      Notas: {reg.notas}
+                    <p className="text-xs text-slate-600 mt-3 leading-relaxed">
+                      <span className="font-semibold">Notas:</span> {reg.notas}
                     </p>
                   )}
                 </div>
@@ -340,9 +381,16 @@ export default function VetFichaClinica() {
     if (tab === "antiparasitarios") {
       return (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Antiparasitarios
-          </h3>
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">
+              Antiparasitarios
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Registro de antiparasitarios administrados y próximas dosis
+              sugeridas.
+            </p>
+          </div>
+
           {registrosAntiparasitarios.length === 0 ? (
             <p className="text-sm text-slate-500">
               No hay antiparasitarios registrados aún para esta mascota.
@@ -355,19 +403,27 @@ export default function VetFichaClinica() {
                   className="border border-emerald-200 bg-emerald-50 rounded-2xl p-4"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-[0.15em]">
+                    <span className="text-xs font-semibold text-emerald-700 uppercase tracking-[0.18em]">
                       Antiparasitario
                     </span>
                     <span className="text-xs text-slate-500">
                       {formatFecha(reg.fecha)}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-800 font-medium">
-                    {extraerLinea(reg.medicamentos, "antiparasitario")}
+
+                  <p className="text-xs text-slate-500 mb-1">
+                    Detalle de la administración:
                   </p>
+
+                  <div className="text-sm text-slate-800 whitespace-pre-line leading-relaxed">
+                    {formatearEnViñetas(
+                      extraerLinea(reg.medicamentos, "antiparasitario")
+                    )}
+                  </div>
+
                   {reg.notas && (
-                    <p className="text-xs text-slate-600 mt-2">
-                      Notas: {reg.notas}
+                    <p className="text-xs text-slate-600 mt-3 leading-relaxed">
+                      <span className="font-semibold">Notas:</span> {reg.notas}
                     </p>
                   )}
                 </div>
@@ -397,9 +453,9 @@ export default function VetFichaClinica() {
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
                 Ficha clínica de {nombreMascota}
               </h1>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-600 mt-1 max-w-xl leading-relaxed">
                 Gestiona el historial clínico, vacunas y antiparasitarios del
-                paciente.
+                paciente desde un solo lugar.
               </p>
             </div>
           </div>
@@ -422,24 +478,36 @@ export default function VetFichaClinica() {
               </div>
             </div>
 
-            <div className="space-y-2 text-sm text-slate-700">
+            <div className="space-y-2 text-sm text-slate-700 leading-relaxed">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Datos del responsable
+              </p>
               <p className="flex items-center gap-2">
                 <UserRound className="h-4 w-4 text-slate-500" />
-                <span className="font-semibold">Dueño:</span> {duenoNombre}
+                <span>
+                  <span className="font-semibold">Dueño:</span> {duenoNombre}
+                </span>
               </p>
               <p className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-slate-500" />
-                <span className="font-semibold">Teléfono:</span>{" "}
-                {duenoTelefonoMascota || "-"}
+                <span>
+                  <span className="font-semibold">Teléfono:</span>{" "}
+                  {duenoTelefonoMascota || "-"}
+                </span>
               </p>
               <p className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-slate-500" />
-                <span className="font-semibold">Correo:</span>{" "}
-                {duenoEmail || "-"}
+                <span>
+                  <span className="font-semibold">Correo:</span>{" "}
+                  {duenoEmail || "-"}
+                </span>
               </p>
             </div>
 
-            <div className="border-t border-slate-200 pt-4 text-sm text-slate-700 space-y-1">
+            <div className="border-t border-slate-200 pt-4 text-sm text-slate-700 leading-relaxed space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Resumen clínico
+              </p>
               <p>
                 <span className="font-semibold">Especie:</span>{" "}
                 {especie || "No registrada"}
@@ -455,6 +523,10 @@ export default function VetFichaClinica() {
               <p>
                 <span className="font-semibold">¿Esterilizado?</span>{" "}
                 {esterilizado}
+              </p>
+              <p>
+                <span className="font-semibold">Fecha de nacimiento:</span>{" "}
+                {formatFecha(fechaNacimiento)}
               </p>
             </div>
           </aside>

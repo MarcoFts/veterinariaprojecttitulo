@@ -9,13 +9,15 @@ import {
   getMotivosConsulta,
 } from "../../services/api";
 import { crearCita } from "../../services/citas";
-
+import { useAuth } from "../../context/AuthContext";
 
 dayjs.locale("es");
 
 const LABEL_OTRO_MOTIVO = "Otro motivo";
 
 export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
+  const { user } = useAuth(); // 👈 veterinario logueado
+
   const [clientes, setClientes] = useState([]);
   const [mascotas, setMascotas] = useState([]);
   const [motivos, setMotivos] = useState([]);
@@ -39,7 +41,6 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
 
     const idStr = String(form.cliente);
 
-    // cliente seleccionado (para poder comparar por nombre si hace falta)
     const clienteSel = clientes.find(
       (c) => String(c.id) === String(form.cliente)
     );
@@ -54,7 +55,6 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
         .toLowerCase()
         .trim();
 
-    // 1) Intentar por ID de cliente (todas las variantes típicas)
     const porId = mascotas.filter((m) => {
       const posiblesIds = [
         m.cliente,
@@ -71,11 +71,8 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       return posiblesIds.includes(idStr);
     });
 
-    if (porId.length > 0) {
-      return porId;
-    }
+    if (porId.length > 0) return porId;
 
-    // 2) Si no encontró por ID, intentar por nombre de cliente
     const porNombre = mascotas.filter((m) => {
       const posibleNombre =
         m.cliente_nombre ||
@@ -89,11 +86,8 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       );
     });
 
-    if (porNombre.length > 0) {
-      return porNombre;
-    }
+    if (porNombre.length > 0) return porNombre;
 
-    // 3) Fallback: si nada coincide, mostramos todas para no dejar el combo vacío
     return mascotas;
   }, [mascotas, form.cliente, clientes]);
 
@@ -124,8 +118,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
         let base = motRes.data || [];
         const tieneOtro = base.some(
           (m) =>
-            (m.nombre || "").toLowerCase() ===
-            LABEL_OTRO_MOTIVO.toLowerCase()
+            (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
         );
         if (!tieneOtro) {
           base = [...base, { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO }];
@@ -164,7 +157,6 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
           : res.data?.results || [];
 
         console.log("Mascotas recibidas para cliente", form.cliente, ">", lista);
-
         setMascotas(lista);
       } catch (err) {
         console.error("Error cargando mascotas:", err);
@@ -187,60 +179,76 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     }));
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!slot) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!slot) return;
 
-  if (!form.cliente || !form.mascota) {
-    alert("Debes seleccionar cliente y mascota.");
-    return;
-  }
+    if (!form.cliente || !form.mascota) {
+      alert("Debes seleccionar cliente y mascota.");
+      return;
+    }
 
-  if (!form.motivo) {
-    alert("Debes seleccionar un motivo de consulta.");
-    return;
-  }
+    if (!form.motivo) {
+      alert("Debes seleccionar un motivo de consulta.");
+      return;
+    }
 
-  if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
-    alert("Por favor escribe el motivo de la consulta.");
-    return;
-  }
+    if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
+      alert("Por favor escribe el motivo de la consulta.");
+      return;
+    }
 
-  const motivoFinal =
-    form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro.trim() : form.motivo;
+    // Motivo final
+    const motivoFinal =
+      form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro.trim() : form.motivo;
 
-  const fechaISO = slot.fecha;
-  const inicioISO = `${fechaISO}T${slot.horaInicio}:00`;
-  const finISO = `${fechaISO}T${slot.horaFin}:00`;
+    // Fecha/hora: "YYYY-MM-DDTHH:mm:ss"
+    const fechaISO = slot.fecha;
+    const inicioISO = `${fechaISO}T${slot.horaInicio}:00`;
+    const finISO = `${fechaISO}T${slot.horaFin}:00`;
 
-  const payload = {
-    cliente_id: form.cliente,
-    mascota_id: form.mascota,
-    motivo: motivoFinal,
-    box: form.box || "",
-    inicio: inicioISO,
-    fin: finISO,
+    // 👇 Veterinario = usuario logueado
+    const vetIdRaw =
+      user?.veterinario_id ??
+      user?.id ??
+      user?.user_id ??
+      null;
+
+    if (!vetIdRaw) {
+      console.error("No se pudo determinar el veterinario desde user:", user);
+      alert(
+        "No se encontró el veterinario asociado a este horario. Revisa la sesión."
+      );
+      return;
+    }
+
+    const payload = {
+      cliente_id: Number(form.cliente),
+      mascota_id: Number(form.mascota),
+      veterinario_id: Number(vetIdRaw),
+      motivo: motivoFinal,
+      box: form.box || slot.box || "",
+      inicio: inicioISO,
+      fin: finISO,
+    };
+
+    console.log("Payload crearCita (vet):", payload);
+
+    setSaving(true);
+
+    try {
+      const res = await crearCita(payload);
+
+      if (onConfirm) onConfirm(res.data);
+      onClose && onClose();
+    } catch (error) {
+      console.error("Error al crear cita:", error);
+      console.log("Detalle backend:", error?.response?.data);
+      alert("Error al crear la cita.");
+    } finally {
+      setSaving(false);
+    }
   };
-
-  setSaving(true);
-
-  try {
-    const res = await crearCita(payload);
-
-    // 🔥 REFRESCA AGENDA DEL VETERINARIO
-    if (onConfirm) onConfirm(res.data);
-
-    // Cierra modal
-    onClose && onClose();
-  } catch (error) {
-    console.error("Error al crear cita:", error);
-    alert("Error al crear la cita.");
-  } finally {
-    setSaving(false);
-  }
-};
-
-
 
   if (!open || !slot) return null;
 

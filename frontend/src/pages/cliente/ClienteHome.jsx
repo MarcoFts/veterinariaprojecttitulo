@@ -152,11 +152,6 @@ export default function ClienteHome() {
                 <li className="flex items-center gap-2">• 0 recordatorios pendientes</li>
               </ul>
             </div>
-
-            <p className="mt-6 text-[11px] text-slate-400 flex items-center gap-1">
-              <AlertCircle size={12} className="text-sky-500" />
-              Datos conectados al backend en tiempo real
-            </p>
           </div>
 
         </section>

@@ -25,7 +25,6 @@ import {
 } from "../../services/api";
 
 dayjs.locale("es");
-
 const LABEL_OTRO_MOTIVO = "Otro motivo";
 
 // Duraciones por tipo de motivo (en minutos)
@@ -44,10 +43,9 @@ export default function Citas() {
   const hoy = dayjs().format("YYYY-MM-DD");
 
   const [fecha, setFecha] = useState(hoy);
-  const [weekOffset, setWeekOffset] = useState(0); // calendario creación
+  const [weekOffset, setWeekOffset] = useState(0);
 
   const [motivosPredef, setMotivosPredef] = useState([]);
-
   const [veterinarios, setVeterinarios] = useState([]);
   const [mascotas, setMascotas] = useState([]);
   const [citasDia, setCitasDia] = useState([]);
@@ -56,22 +54,21 @@ export default function Citas() {
   const [loadingForm, setLoadingForm] = useState(false);
   const [error, setError] = useState("");
 
-  // slots para crear cita
+  // Slots creación
   const [slots, setSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
-  // form.hora SIEMPRE viene de un slot del backend
   const [form, setForm] = useState({
     mascota: "",
     veterinario: "",
     fecha: hoy,
     hora: "",
-    duracion: 30, // se ajusta según motivo
-    motivo: "", // valor seleccionado del select
-    motivoOtro: "", // texto libre si selecciona "Otro motivo"
+    duracion: 30,
+    motivo: "",
+    motivoOtro: "",
   });
 
-  // --- Estado para reprogramar ---
+  // Reprogramación
   const [showModal, setShowModal] = useState(false);
   const [selectedCita, setSelectedCita] = useState(null);
   const [nuevaFecha, setNuevaFecha] = useState(hoy);
@@ -79,11 +76,7 @@ export default function Citas() {
   const [loadingSlotsReprog, setLoadingSlotsReprog] = useState(false);
   const [slotSeleccionado, setSlotSeleccionado] = useState("");
   const [savingReprog, setSavingReprog] = useState(false);
-
-  // mini calendario dentro del modal de reprogramar
   const [reprogWeekOffset, setReprogWeekOffset] = useState(0);
-
-  // ---------- Helpers ----------
 
   const citasOrdenadas = useMemo(() => {
     return [...citasDia].sort((a, b) =>
@@ -91,7 +84,7 @@ export default function Citas() {
     );
   }, [citasDia]);
 
-  // Próximos 7 días para el “calendario” de creación (izquierda)
+  // Mini calendario creación
   const upcomingDays = useMemo(() => {
     const base = dayjs().add(weekOffset, "day");
     return Array.from({ length: 7 }, (_, i) => {
@@ -108,7 +101,7 @@ export default function Citas() {
     return dayjs().add(weekOffset, "day").format("MMM YYYY");
   }, [weekOffset]);
 
-  // Mini calendario del modal de reprogramar
+  // Mini calendario reprogramar
   const upcomingDaysReprog = useMemo(() => {
     const base = dayjs().add(reprogWeekOffset, "day");
     return Array.from({ length: 7 }, (_, i) => {
@@ -134,7 +127,6 @@ export default function Citas() {
     }));
   };
 
-  // cuando cambia el motivo, ajustamos duración
   const handleMotivoChange = (e) => {
     const value = e.target.value;
     const duracionBase = DURACION_POR_MOTIVO[value] || 30;
@@ -147,13 +139,11 @@ export default function Citas() {
 
     setForm(nuevoForm);
 
-    // si ya hay vet + fecha, recargar slots con nueva duración
     if (nuevoForm.veterinario && nuevoForm.fecha) {
       cargarSlotsCrear(nuevoForm);
     }
   };
 
-  // ---------- Cargar datos base (vets, mascotas, citas) ----------
   const cargarDatos = async () => {
     setLoading(true);
     setError("");
@@ -169,24 +159,20 @@ export default function Citas() {
       setCitasDia(citasResp.data || []);
     } catch (err) {
       if (err?.response?.status === 401) {
-        setError(
-          "Tu sesión expiró. Vuelve a iniciar sesión cuando el backend esté activo."
-        );
+        setError("Tu sesión expiró. Vuelve a iniciar sesión.");
       } else {
-        setError("No se pudieron cargar los datos desde el servidor.");
+        setError("No se pudieron cargar los datos.");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // cargar motivos predefinidos desde el backend
   const cargarMotivos = async () => {
     try {
       const resp = await getMotivosConsulta();
       let base = resp.data || [];
 
-      // Nos aseguramos de que exista "Otro motivo"
       const tieneOtro = base.some(
         (m) => (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
       );
@@ -196,7 +182,7 @@ export default function Citas() {
 
       setMotivosPredef(base);
     } catch (err) {
-      console.error("Error cargando motivos de consulta:", err);
+      console.error(err);
     }
   };
 
@@ -208,8 +194,7 @@ export default function Citas() {
     cargarMotivos();
   }, []);
 
-  // ---------- Disponibilidad para crear cita ----------
-
+  // Disponibilidad creación
   const cargarSlotsCrear = async (values) => {
     const f = values || form;
     if (!f.veterinario || !f.fecha) return;
@@ -221,7 +206,7 @@ export default function Citas() {
         veterinario_id: f.veterinario,
         fecha: f.fecha,
         duracion: f.duracion || 30,
-        box: "", // el box lo gestionará el vet, no el cliente
+        box: "",
       });
       setSlots(resp.data?.slots || []);
     } catch (err) {
@@ -231,14 +216,9 @@ export default function Citas() {
     }
   };
 
-  // cambio en el select de veterinario
   const handleChangeVetOrFecha = async (e) => {
     const { name, value } = e.target;
-    const nuevoForm = {
-      ...form,
-      [name]: value,
-      hora: "",
-    };
+    const nuevoForm = { ...form, [name]: value, hora: "" };
     setForm(nuevoForm);
 
     if (nuevoForm.veterinario && nuevoForm.fecha) {
@@ -246,21 +226,13 @@ export default function Citas() {
     }
   };
 
-  // selección desde el calendario de chips de días (creación)
   const handleSelectDia = async (dateValue) => {
-    const nuevoForm = {
-      ...form,
-      fecha: dateValue,
-      hora: "",
-    };
+    const nuevoForm = { ...form, fecha: dateValue, hora: "" };
     setForm(nuevoForm);
     setFecha(dateValue);
-    if (nuevoForm.veterinario) {
-      await cargarSlotsCrear(nuevoForm);
-    }
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
   };
 
-  // navegar semanas con flechas (creación)
   const handleWeekNav = async (direction) => {
     let nextOffset = direction === "next" ? weekOffset + 7 : weekOffset - 7;
     if (nextOffset < 0) nextOffset = 0;
@@ -268,83 +240,76 @@ export default function Citas() {
     const base = dayjs().add(nextOffset, "day");
     const newDate = base.format("YYYY-MM-DD");
 
-    const nuevoForm = {
-      ...form,
-      fecha: newDate,
-      hora: "",
-    };
-
+    const nuevoForm = { ...form, fecha: newDate, hora: "" };
     setWeekOffset(nextOffset);
     setForm(nuevoForm);
     setFecha(newDate);
 
-    if (nuevoForm.veterinario) {
-      await cargarSlotsCrear(nuevoForm);
-    }
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
   };
 
-  // cambio de fecha desde el input superior derecho (panel citas del día)
   const handleChangeFechaHeader = async (e) => {
     const val = e.target.value;
-    setFecha(val);
-
-    const nuevoForm = {
-      ...form,
-      fecha: val,
-      hora: "",
-    };
-    setForm(nuevoForm);
-
-    const diffDays = dayjs(val).diff(dayjs().startOf("day"), "day");
-    const alignedOffset = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
-    setWeekOffset(alignedOffset);
-
-    if (nuevoForm.veterinario) {
-      await cargarSlotsCrear(nuevoForm);
+    const hoy = dayjs().format("YYYY-MM-DD");
+  
+    // ❌ si el usuario intenta seleccionar un día pasado
+    if (dayjs(val).isBefore(hoy)) {
+      alert("No puedes ver ni agendar en días pasados.");
+      setFecha(hoy);
+  
+      // Ajustar form también
+      setForm((prev) => ({
+        ...prev,
+        fecha: hoy,
+        hora: "",
+      }));
+  
+      return;
     }
+  
+    // ✔ Si la fecha es válida
+    setFecha(val);
+  
+    const nuevoForm = { ...form, fecha: val, hora: "" };
+    setForm(nuevoForm);
+  
+    const diffDays = dayjs(val).diff(dayjs().startOf("day"), "day");
+    const aligned = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
+    setWeekOffset(aligned);
+  
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
   };
-
-  // ---------- Crear cita ----------
-
+  
+  // Crear cita
   const handleSubmitCrear = async (e) => {
     e.preventDefault();
 
     if (!form.mascota || !form.veterinario || !form.fecha || !form.hora) {
-      alert(
-        "Debes seleccionar mascota, veterinario, fecha y un horario disponible."
-      );
+      alert("Debes completar todos los campos.");
       return;
     }
 
-    // Motivo obligatorio
     if (!form.motivo) {
-      alert("Debes seleccionar un motivo de consulta.");
+      alert("Debes seleccionar un motivo.");
       return;
     }
 
-    // Si seleccionó "Otro motivo", exigimos texto
     if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
-      alert("Por favor escribe el motivo de la consulta.");
+      alert("Escribe el motivo.");
       return;
     }
 
-    // Construir inicio y fin
+    const clienteId = localStorage.getItem("cliente_id");
     const inicio = `${form.fecha}T${form.hora}:00`;
-    const durMin = Number(form.duracion || 30);
-    const fin = dayjs(inicio).add(durMin, "minute").format("YYYY-MM-DDTHH:mm:ss");
+    const fin = dayjs(inicio)
+      .add(form.duracion, "minute")
+      .format("YYYY-MM-DDTHH:mm:ss");
 
     const motivoFinal =
-      form.motivo === LABEL_OTRO_MOTIVO
-        ? form.motivoOtro.trim()
-        : form.motivo || "";
+      form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro : form.motivo;
 
-    // 🔥🔥🔥 CORREGIDO PARA QUE EL BACKEND LO ACEPTE 🔥🔥🔥
-    // ⚠️ AGREGAR ESTO ARRIBA DEL PAYLOAD
-    const clienteId = localStorage.getItem("cliente_id");
-
-    // ⚠️ REEMPLAZAR EL PAYLOAD POR ESTE:
     const payload = {
-      cliente_id: Number(clienteId),        // ← OBLIGATORIO PARA EL BACKEND
+      cliente_id: Number(clienteId),
       mascota_id: Number(form.mascota),
       veterinario_id: Number(form.veterinario),
       inicio,
@@ -353,61 +318,39 @@ export default function Citas() {
       box: "BOX-1",
     };
 
-
-    console.log("PAYLOAD →", payload);
-
     setLoadingForm(true);
     try {
       await crearCita(payload);
-
-      // limpiar formulario
-      setForm((prev) => ({
-        ...prev,
-        hora: "",
-        motivo: "",
-        motivoOtro: "",
-      }));
-
+      setForm({ ...form, hora: "", motivo: "", motivoOtro: "" });
       setSlots([]);
-
-      // refrescar citas del día
       await cargarDatos();
     } catch (err) {
-      console.error("ERROR CREAR CITA:", err.response?.data || err);
-      alert("No se pudo crear la cita. Revise disponibilidad o la hora seleccionada.");
+      alert("No se pudo crear la cita.");
     } finally {
       setLoadingForm(false);
     }
   };
 
-
-    // ---------- Cancelar cita ----------
-
-    // --- Mini modal de confirmación ---
+  // Cancelar cita
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmCitaId, setConfirmCitaId] = useState(null);
 
-    // ---------- Cancelar cita ----------
-    const handleCancelarCita = (citaId) => {
-      setConfirmCitaId(citaId);
-      setConfirmOpen(true);
-    };
+  const handleCancelarCita = (id) => {
+    setConfirmCitaId(id);
+    setConfirmOpen(true);
+  };
 
-    const confirmarCancelacion = async () => {
-      try {
-        await cancelarCita(confirmCitaId);
-        await cargarDatos();
-      } catch (err) {
-        console.error(err);
-        alert("No se pudo cancelar la cita.");
-      } finally {
-        setConfirmOpen(false);
-        setConfirmCitaId(null);
-      }
-    };
-
-
-  // ---------- Reprogramar (cliente) ----------
+  const confirmarCancelacion = async () => {
+    try {
+      await cancelarCita(confirmCitaId);
+      await cargarDatos();
+    } catch (err) {
+      alert("Error al cancelar.");
+    } finally {
+      setConfirmOpen(false);
+      setConfirmCitaId(null);
+    }
+  };
 
   const calcularDuracionCita = (cita) => {
     if (cita.inicio && cita.fin) {
@@ -556,6 +499,7 @@ export default function Citas() {
             <input
               type="date"
               value={fecha}
+              min={hoy}  // <-- EVITA DIAS PASADOS
               onChange={handleChangeFechaHeader}
               className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
             />
@@ -770,32 +714,54 @@ export default function Citas() {
                     </p>
 
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                      {slots.map((h) => (
-                        <label
-                          key={h}
-                          className={
-                            "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
-                            (form.hora === h
-                              ? "bg-sky-600 text-white border-sky-600"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
-                          }
-                        >
-                          <input
-                            type="radio"
-                            name="hora"
-                            value={h}
-                            checked={form.hora === h}
-                            onChange={() =>
-                              setForm((prev) => ({
-                                ...prev,
-                                hora: h,
-                              }))
+                      {slots.map((h) => {
+                        const slotTime = dayjs(`${form.fecha}T${h}`);
+                        const now = dayjs();
+
+                        // 1) Bloquear horas pasadas
+                        const esHoraPasada =
+                          form.fecha === now.format("YYYY-MM-DD") &&
+                          slotTime.isBefore(now);
+
+                        // 2) Bloquear horas demasiado cercanas (ej: margen = 60min)
+                        const margenMinutos = 60;
+                        const esMuyCercana =
+                          form.fecha === now.format("YYYY-MM-DD") &&
+                          slotTime.isBefore(now.add(margenMinutos, "minute"));
+
+                        const deshabilitada = esHoraPasada || esMuyCercana;
+
+                        return (
+                          <label
+                            key={h}
+                            className={
+                              "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs select-none " +
+                              (deshabilitada
+                                ? "bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed"
+                                : form.hora === h
+                                  ? "bg-sky-600 text-white border-sky-600 cursor-pointer"
+                                  : "bg-white text-slate-700 border-slate-300 cursor-pointer hover:bg-slate-100")
                             }
-                            className="hidden"
-                          />
-                          {h}
-                        </label>
-                      ))}
+                          >
+                            <input
+                              type="radio"
+                              name="hora"
+                              value={h}
+                              checked={form.hora === h}
+                              disabled={deshabilitada}
+                              onChange={() =>
+                                !deshabilitada &&
+                                setForm((prev) => ({
+                                  ...prev,
+                                  hora: h,
+                                }))
+                              }
+                              className="hidden"
+                            />
+                            {h}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1039,51 +1005,35 @@ export default function Citas() {
           </div>
         )}
         {/* Modal reprogramar */}
-      {showModal && selectedCita && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-5">
-            <h3 className="text-base font-semibold text-slate-900 mb-3">
-              Reprogramar cita #{selectedCita.id}
-            </h3>
+        {/* ⭐⭐⭐ MINI-MODAL PREMIUM DE CANCELACIÓN ⭐⭐⭐ */}
+        {confirmOpen && (
+          <div className="fixed inset-0 flex items-center justify-center z-[9999]">
+            <div className="bg-white p-6 rounded-xl shadow-xl w-[90%] max-w-sm border border-neutral-200 animate-fadeScale">
 
-            <form onSubmit={handleSubmitReprogramar} className="space-y-4">
-              {/* Mini calendario */}
-              {/* ... todo el código que ya tienes ... */}
+              <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+                ¿Cancelar cita?
+              </h2>
 
-            </form>
-          </div>
-        </div>
-      )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-700 hover:bg-neutral-300 transition"
+                >
+                  No
+                </button>
 
-      {/* ⭐⭐⭐ MINI-MODAL PREMIUM DE CANCELACIÓN ⭐⭐⭐ */}
-      {confirmOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-[9999]">
-          <div className="bg-white p-6 rounded-xl shadow-xl w-[90%] max-w-sm border border-neutral-200 animate-fadeScale">
+                <button
+                  onClick={confirmarCancelacion}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+                >
+                  Sí, cancelar
+                </button>
+              </div>
 
-            <h2 className="text-lg font-semibold text-neutral-800 mb-2">
-              ¿Cancelar cita?
-            </h2>
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setConfirmOpen(false)}
-                className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-700 hover:bg-neutral-300 transition"
-              >
-                No
-              </button>
-
-              <button
-                onClick={confirmarCancelacion}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
-              >
-                Sí, cancelar
-              </button>
             </div>
-
           </div>
-        </div>
-      )}
-      {/* ⭐⭐⭐ FIN MINI-MODAL ⭐⭐⭐ */}
+        )}
+        {/* ⭐⭐⭐ FIN MINI-MODAL ⭐⭐⭐ */}
       </div>
     </LayoutCliente>
   );

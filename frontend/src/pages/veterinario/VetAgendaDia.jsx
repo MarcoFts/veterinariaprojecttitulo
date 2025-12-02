@@ -27,7 +27,7 @@ const sumarMinutos = (horaStr, minutos) => {
 };
 
 export default function VetAgendaDia() {
-  const [fecha, setFecha] = useState(todayStr()); // día seleccionado para el resumen
+  const [fecha, setFecha] = useState(todayStr()); // día seleccionado para el encabezado
   const [weekOffset, setWeekOffset] = useState(0); // desplazamiento de la semana
 
   const [slots, setSlots] = useState([]); // todos los slots de la semana (cada uno con fecha)
@@ -343,8 +343,7 @@ export default function VetAgendaDia() {
       )
     );
     setSlotParaAsignar(null);
-    // si quisieras recargar del backend:
-    // setReloadAgenda((n) => n + 1);
+    setReloadAgenda((n) => n + 1); // recarga backend
   };
 
   const handleCancelarSlot = (slotId) => {
@@ -360,27 +359,27 @@ export default function VetAgendaDia() {
   const getEstadoChip = (slot) => {
     if (slot.estado === "libre")
       return (
-        <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[2px] text-[10px] font-medium text-emerald-700">
+        <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
           Libre
         </span>
       );
 
     if (slot.estado === "cancelada")
       return (
-        <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-[2px] text-[10px] font-medium text-rose-700">
+        <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-[1px] text-[9px] font-medium text-rose-700">
           Cancelada
         </span>
       );
 
     if (slot.estadoCita === "confirmada") {
       return (
-        <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-[2px] text-[10px] font-medium text-sky-700">
+        <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-[1px] text-[9px] font-medium text-sky-700">
           Confirmada
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[2px] text-[10px] font-medium text-amber-800">
+      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
         Pendiente
       </span>
     );
@@ -396,14 +395,9 @@ export default function VetAgendaDia() {
     return "border border-sky-200 bg-sky-50 hover:bg-sky-100";
   };
 
-  const slotsDelDiaSeleccionado = useMemo(
-    () => slots.filter((s) => s.fecha === fecha),
-    [slots, fecha]
-  );
-
   return (
     <LayoutVet>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Encabezado */}
         <section className="flex flex-col gap-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -415,8 +409,8 @@ export default function VetAgendaDia() {
                 Agenda semanal
               </h1>
               <p className="text-sm text-slate-500 mt-1">
-                Visualiza tus horas disponibles y tus citas distribuidas en el
-                calendario semanal.
+                Visualiza tus horas disponibles y tus citas en un calendario
+                compacto de la semana.
               </p>
               {error && (
                 <p className="mt-2 text-xs text-rose-500">{error}</p>
@@ -441,7 +435,7 @@ export default function VetAgendaDia() {
               Selecciona un día para el resumen
             </span>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => handleWeekNav("prev")}
@@ -458,16 +452,16 @@ export default function VetAgendaDia() {
                       type="button"
                       onClick={() => handleSelectDia(d.value)}
                       className={
-                        "flex flex-col items-center min-w-[3rem] px-2 py-1 rounded-lg border text-[11px] " +
+                        "flex flex-col items-center min-w-[2.6rem] px-2 py-1 rounded-lg border text-[10px] " +
                         (fecha === d.value
                           ? "bg-sky-600 text-white border-sky-600"
                           : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
                       }
                     >
-                      <span className="uppercase tracking-wide text-[10px]">
+                      <span className="uppercase tracking-wide text-[9px]">
                         {d.dow}
                       </span>
-                      <span className="text-sm font-semibold">
+                      <span className="text-xs font-semibold">
                         {d.dia}
                       </span>
                     </button>
@@ -486,18 +480,16 @@ export default function VetAgendaDia() {
           </div>
         </section>
 
-        {/* Contenido principal */}
-        <section className="grid grid-cols-1 lg:grid-cols-[1.7fr,1fr] gap-6">
-          {/* Calendario semanal */}
-          <div className="rounded-2xl bg-white shadow-sm border border-slate-100 p-4 md:p-5 space-y-4">
+        {/* Calendario semanal */}
+        <section>
+          <div className="rounded-2xl bg-white shadow-sm border border-slate-100 p-3 md:p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
                   Calendario semanal
                 </p>
                 <p className="text-xs text-slate-500">
-                  Cada columna es un día, cada fila un bloque horario de 30
-                  minutos.
+                  7 días · bloques de 30 minutos.
                 </p>
               </div>
             </div>
@@ -515,21 +507,25 @@ export default function VetAgendaDia() {
             )}
 
             {!loading && horas.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-separate border-spacing-y-2">
+              <div className="overflow-auto max-w-full max-h-[540px]">
+                <table className="table-fixed w-full border-separate border-spacing-y-1 text-[11px]">
                   <thead>
                     <tr>
-                      <th className="w-16 text-right text-[11px] font-semibold text-slate-500 pr-2">
+                      <th className="w-14 text-right text-[10px] font-semibold text-slate-500 pr-2 pt-1">
                         Hora
                       </th>
                       {upcomingDays.map((d) => (
                         <th
                           key={d.value}
-                          className="text-center text-[11px] font-semibold text-slate-600"
+                          className="text-center text-[10px] font-semibold text-slate-600 px-1"
                         >
-                          <div className="flex flex-col items-center">
-                            <span className="uppercase">{d.dow}</span>
-                            <span className="text-sm">{d.dia}</span>
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="uppercase text-[9px]">
+                              {d.dow}
+                            </span>
+                            <span className="text-xs font-semibold">
+                              {d.dia}
+                            </span>
                           </div>
                         </th>
                       ))}
@@ -539,7 +535,7 @@ export default function VetAgendaDia() {
                     {horas.map((hora) => (
                       <tr key={hora}>
                         {/* columna de hora */}
-                        <td className="align-top text-right text-[11px] font-medium text-slate-500 pr-2 pt-2">
+                        <td className="align-top text-right text-[10px] font-medium text-slate-500 pr-2 pt-2">
                           {hora}
                         </td>
 
@@ -552,17 +548,17 @@ export default function VetAgendaDia() {
 
                           if (!slot) {
                             return (
-                              <td key={d.value} className="align-top px-1">
-                                <div className="h-14 rounded-xl border border-dashed border-slate-100 bg-slate-50/40" />
+                              <td key={d.value} className="align-top px-[2px]">
+                                <div className="h-9 rounded-lg border border-dashed border-slate-100 bg-slate-50/40" />
                               </td>
                             );
                           }
 
                           return (
-                            <td key={d.value} className="align-top px-1">
+                            <td key={d.value} className="align-top px-[2px]">
                               <div
                                 className={
-                                  "h-full rounded-xl px-3 py-2 text-[11px] cursor-pointer transition " +
+                                  "min-h-[2.4rem] rounded-lg px-2 py-1.5 text-[10px] cursor-pointer transition " +
                                   getSlotCardClasses(slot)
                                 }
                                 onClick={() => {
@@ -575,8 +571,8 @@ export default function VetAgendaDia() {
                               >
                                 {slot.estado === "libre" ? (
                                   <div className="flex flex-col h-full justify-between">
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-semibold text-slate-800">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-semibold text-slate-800 text-[10px]">
                                         Horario libre
                                       </span>
                                       {getEstadoChip(slot)}
@@ -584,7 +580,7 @@ export default function VetAgendaDia() {
                                     <div className="flex justify-end mt-1">
                                       <button
                                         type="button"
-                                        className="rounded-lg bg-sky-600 px-3 py-1 text-[10px] font-semibold text-white hover:bg-sky-700"
+                                        className="rounded-md bg-sky-600 px-2 py-[3px] text-[9px] font-semibold text-white hover:bg-sky-700"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setSlotParaAsignar(slot);
@@ -595,52 +591,52 @@ export default function VetAgendaDia() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex flex-col gap-1">
+                                  <div className="flex flex-col gap-0.5">
                                     <div className="flex items-start justify-between gap-1">
-                                      <div>
+                                      <div className="space-y-[1px]">
                                         {/* rango de hora */}
-                                        <p className="text-[10px] font-semibold text-slate-500">
+                                        <p className="text-[9px] font-semibold text-slate-500">
                                           {slot.horaInicio} –{" "}
                                           {slot.horaFin}
                                         </p>
 
                                         {/* mascota */}
-                                        <p className="text-[11px] font-semibold text-slate-900 line-clamp-1">
+                                        <p className="text-[10px] font-semibold text-slate-900 line-clamp-1">
                                           {slot.mascota ||
                                             "Mascota sin nombre"}
                                         </p>
 
                                         {/* dueño */}
-                                        <p className="text-[10px] text-slate-600 line-clamp-1">
+                                        <p className="text-[9px] text-slate-600 line-clamp-1">
                                           Dueño:{" "}
                                           {slot.paciente ||
                                             "Cliente no registrado"}
                                         </p>
                                       </div>
 
-                                      <div className="flex flex-col items-end gap-1">
+                                      <div className="flex flex-col items-end gap-0.5">
                                         {getEstadoChip(slot)}
                                         {slot.box && (
-                                          <span className="text-[10px] text-slate-500">
+                                          <span className="text-[9px] text-slate-500">
                                             Box:{" "}
                                             <strong>{slot.box}</strong>
                                           </span>
                                         )}
                                       </div>
                                     </div>
-                                    <p className="text-[10px] text-slate-600 line-clamp-2">
+                                    <p className="text-[9px] text-slate-600 line-clamp-2">
                                       Motivo:{" "}
                                       {slot.motivo ||
                                         "Sin motivo registrado"}
                                     </p>
-                                    <div className="flex justify-end gap-1.5 mt-1">
+                                    <div className="flex justify-end gap-1 mt-1">
                                       {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
                                       {slot.estado !== "cancelada" &&
                                         slot.estadoCita !==
                                           "confirmada" && (
                                           <button
                                             type="button"
-                                            className="rounded-lg bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-white hover:bg-emerald-600"
+                                            className="rounded-md bg-emerald-500 px-2 py-[3px] text-[9px] font-semibold text-white hover:bg-emerald-600"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               abrirConfirmar(slot);
@@ -653,7 +649,7 @@ export default function VetAgendaDia() {
                                       {/* Reprogramar */}
                                       <button
                                         type="button"
-                                        className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50"
+                                        className="rounded-md bg-white/70 px-2 py-[3px] text-[9px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           if (!slot.citaId) return;
@@ -670,7 +666,7 @@ export default function VetAgendaDia() {
                                       {/* Cancelar */}
                                       <button
                                         type="button"
-                                        className="rounded-lg bg-white/70 px-2 py-1 text-[10px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50"
+                                        className="rounded-md bg-white/70 px-2 py-[3px] text-[9px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleCancelarSlot(slot.id);
@@ -692,59 +688,17 @@ export default function VetAgendaDia() {
               </div>
             )}
           </div>
-
-          {/* Resumen del día seleccionado */}
-          <div className="rounded-2xl bg-whiteshadow-sm border border-slate-100 p-4 md:p-5 space-y-4">
-            <p className="text-sm font-semibold text-slate-900">
-              Resumen del día
-            </p>
-            <p className="text-[11px] text-slate-500">
-              {dayjs(fecha).format("dddd DD [de] MMMM YYYY")}
-            </p>
-            <ul className="space-y-2 text-xs text-slate-600">
-              <li>
-                • Horas libres:{" "}
-                {
-                  slotsDelDiaSeleccionado.filter(
-                    (s) => s.estado === "libre"
-                  ).length
-                }
-              </li>
-              <li>
-                • Horas ocupadas:{" "}
-                {
-                  slotsDelDiaSeleccionado.filter(
-                    (s) => s.estado === "ocupada"
-                  ).length
-                }
-              </li>
-              <li>
-                • Horas canceladas:{" "}
-                {
-                  slotsDelDiaSeleccionado.filter(
-                    (s) => s.estado === "cancelada"
-                  ).length
-                }
-              </li>
-            </ul>
-            <p className="text-[11px] text-slate-400">
-              Esta vista se alimenta de tus horarios, bloqueos y citas
-              almacenadas en el backend.
-            </p>
-          </div>
         </section>
       </div>
-      
+
       <ModalCrearCita
         open={!!slotParaAsignar}
         slot={slotParaAsignar}
         onClose={() => setSlotParaAsignar(null)}
         onConfirm={(data) => {
-          handleAsignarConfirm(data);      // actualiza UI inmediata
-          setReloadAgenda((n) => n + 1);   // 🔥 fuerza recarga del backend
+          handleAsignarConfirm(data);
         }}
       />
-
 
       {/* Modal reprogramar */}
       <ModalReprogramarCita
