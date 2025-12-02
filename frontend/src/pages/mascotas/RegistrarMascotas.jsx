@@ -47,6 +47,9 @@ export default function RegistrarMascota() {
   const [error, setError] = useState("");
   const [showDateAlert, setShowDateAlert] = useState(false);
 
+  // 🔥 NUEVO: popup de éxito
+  const [showSuccess, setShowSuccess] = useState(false);
+
   // ---------------------------------------------------------
   // VALIDAR FECHA FUTURA
   // ---------------------------------------------------------
@@ -79,18 +82,17 @@ export default function RegistrarMascota() {
     value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : "";
 
   // ---------------------------------------------------------
-  // MICROCHIP → BOOLEANO
+  // MICROCHIP → FORMATO CORRECTO
   // ---------------------------------------------------------
   const normalizeMicrochip = (value) => {
-    if (!value || value.trim() === "") return null;     // ← opcional
+    if (!value || value.trim() === "") return null;
     const v = value.trim().toLowerCase();
 
     if (v === "si" || v === "sí") return "Si";
     if (v === "no") return "No";
 
-    return null; // si escribe cualquier cosa → null
+    return null;
   };
-
 
   // ---------------------------------------------------------
   // SUBMIT
@@ -106,7 +108,6 @@ export default function RegistrarMascota() {
       return;
     }
 
-    // 🔥 OBTENER ID DEL USUARIO PARA cliente_id (POSTGRES OBLIGA)
     const clienteId = getUserIdFromToken();
     if (!clienteId) {
       setSaving(false);
@@ -116,7 +117,7 @@ export default function RegistrarMascota() {
 
     try {
       const payload = {
-        cliente_id: clienteId, // 🔥 requerido por PostgreSQL
+        cliente_id: clienteId,
         nombre: pet.nombre,
         especie: normalizeSpecies(pet.especie),
         raza: pet.raza || null,
@@ -126,21 +127,23 @@ export default function RegistrarMascota() {
             : pet.sexo === "hembra"
             ? "Hembra"
             : "No informado",
-
         fecha_nacimiento: pet.fechaNacimiento || null,
         peso_kg: pet.peso ? Number(pet.peso) : null,
         esterilizado: !!pet.esterilizado,
-
-        // 🔥 AHORA BOOLEANO REAL, NO STRING
         microchip: normalizeMicrochip(pet.microchip),
-
         notas_salud: pet.notas || "",
       };
 
       await api.post("/mascotas/", payload);
 
+      // ÉXITO → mostrar popup premium
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        navigate("/cliente/mis-mascotas");
+      }, 1500);
+
       setSaving(false);
-      navigate("/cliente/home");
     } catch (err) {
       setSaving(false);
       setError("No se pudo registrar la mascota.");
@@ -194,7 +197,7 @@ export default function RegistrarMascota() {
                   value={pet.nombre}
                   onChange={handleChange}
                   placeholder="Ej: Max, Luna, Rocky..."
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 />
               </div>
 
@@ -207,7 +210,7 @@ export default function RegistrarMascota() {
                   name="especie"
                   value={pet.especie}
                   onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 >
                   <option value="">Seleccionar especie</option>
                   <option value="perro">Perro</option>
@@ -227,7 +230,7 @@ export default function RegistrarMascota() {
                   value={pet.raza}
                   onChange={handleChange}
                   placeholder="Ej: Mestizo, Labrador, Siamés..."
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 />
               </div>
             </div>
@@ -240,7 +243,7 @@ export default function RegistrarMascota() {
                   name="sexo"
                   value={pet.sexo}
                   onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 >
                   <option value="">Seleccionar</option>
                   <option value="hembra">Hembra</option>
@@ -258,7 +261,7 @@ export default function RegistrarMascota() {
                   name="fechaNacimiento"
                   value={pet.fechaNacimiento}
                   onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 />
               </div>
             </div>
@@ -277,7 +280,7 @@ export default function RegistrarMascota() {
                   value={pet.peso}
                   onChange={handleChange}
                   placeholder="Ej: 4.5"
-                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
                 />
               </div>
 
@@ -312,7 +315,7 @@ export default function RegistrarMascota() {
                 value={pet.microchip}
                 onChange={handleChange}
                 placeholder="Si / No"
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300"
               />
             </div>
 
@@ -328,7 +331,7 @@ export default function RegistrarMascota() {
                 onChange={handleChange}
                 rows={4}
                 placeholder="Alergias, medicamentos, enfermedades crónicas..."
-                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 resize-none"
+                className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:ring-2 focus:ring-sky-300 resize-none"
               />
             </div>
 
@@ -358,28 +361,46 @@ export default function RegistrarMascota() {
         </section>
       </div>
 
-    {/* POPUP FECHA FUTURA */}
-    {showDateAlert && (
-      <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4">
-        <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
-
-          <h2 className="text-lg font-semibold text-neutral-800 mb-2">
-            Fecha inválida
-          </h2>
-
-          <p className="text-neutral-600 text-sm mb-6">
-            La fecha de nacimiento no puede ser en el futuro.
-          </p>
-
-          <button
-            onClick={() => setShowDateAlert(false)}
-            className="w-full py-2 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700 transition"
-          >
-            Entendido
-          </button>
+      {/* POPUP FECHA FUTURA */}
+      {showDateAlert && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
+            <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+              Fecha inválida
+            </h2>
+            <p className="text-neutral-600 text-sm mb-6">
+              La fecha de nacimiento no puede ser en el futuro.
+            </p>
+            <button
+              onClick={() => setShowDateAlert(false)}
+              className="w-full py-2 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700 transition"
+            >
+              Entendido
+            </button>
+          </div>
         </div>
-      </div>
-    )}
+      )}
+
+      {/* POPUP DE ÉXITO (VETYON STYLE) */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
+            <h2 className="text-lg font-semibold text-slate-800 mb-2">
+              Mascota registrada
+            </h2>
+            <p className="text-slate-600 text-sm mb-6">
+              Tu mascota ha sido registrada exitosamente.
+            </p>
+
+            <button
+              onClick={() => navigate("/cliente/mis-mascotas")}
+              className="w-full py-2 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700 transition"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      )}
     </LayoutCliente>
   );
 }

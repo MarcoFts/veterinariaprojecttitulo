@@ -14,6 +14,7 @@ import ResetPassword from "./pages/auth/ResetPassword";
 // Cliente
 import ClienteHome from "./pages/cliente/ClienteHome";
 import Citas from "./pages/cliente/Citas";
+import MisMascotas from "./pages/cliente/MisMascotas";
 import RegistrarMascotas from "./pages/mascotas/RegistrarMascotas";
 
 // Veterinario
@@ -72,6 +73,15 @@ function App() {
           </ClienteRoute>
         }
       />
+      <Route
+        path="/cliente/mis-mascotas"
+        element={
+          <ClienteRoute>
+            <MisMascotas />
+          </ClienteRoute>
+        }
+      />
+
 
       {/* Veterinario (protegidas) */}
       <Route

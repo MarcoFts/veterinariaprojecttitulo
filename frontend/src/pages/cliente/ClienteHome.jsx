@@ -26,22 +26,8 @@ export default function ClienteHome() {
               <p className="text-base text-slate-600 mt-3 leading-relaxed">
                 Administra tus mascotas, revisa tus citas, agenda nuevas atenciones y mantén control total sobre su bienestar.
               </p>
-            </div>
-
+            </div>  
             <div className="flex gap-3 justify-end">
-              <Link
-                to="/citas"
-                className="inline-flex items-center justify-center rounded-xl bg-white/80 backdrop-blur-md px-4 py-2 text-sm font-medium text-slate-700 border border-slate-200 hover:bg-white shadow transition"
-              >
-                Ver historial
-              </Link>
-
-              <Link
-                to="/citas"
-                className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95 hover:shadow-xl transition"
-              >
-                Reservar hora
-              </Link>
             </div>
           </div>
         </section>
@@ -84,11 +70,12 @@ export default function ClienteHome() {
             </div>
 
             <Link
-              to="/cliente/mascotas"
+              to="/cliente/mis-mascotas"
               className="text-sm font-medium text-sky-600 hover:text-blue-700 transition"
             >
-              Registrar mascota →
+              Ver mis mascotas →
             </Link>
+
 
           </div>
 

@@ -1,12 +1,13 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Home, CalendarDays, PawPrint, UserCircle2 } from "lucide-react";
-import { logout } from "../../auth"; // ajusta si tu auth.js está en otra ruta
+import { logout } from "../../auth";
 
 const navLinks = [
   { label: "Inicio", href: "/cliente/home", icon: Home },
   { label: "Mis citas", href: "/cliente/citas", icon: CalendarDays },
-  { label: "Mis mascotas", href: "/cliente/mascotas", icon: PawPrint },
+  { label: "Mis mascotas", href: "/cliente/mis-mascotas", icon: PawPrint }, // 👈 NUEVO LISTADO
+  { label: "Registrar mascota", href: "/cliente/mascotas", icon: PawPrint }, // 👈 RENOMBRADO
 ];
 
 export default function NavbarCliente() {
@@ -96,10 +97,9 @@ export default function NavbarCliente() {
                     <span className="text-[11px] text-slate-400">(futuro)</span>
                   </button>
 
-                  {/* SEPARADOR */}
                   <div className="h-px bg-slate-200 my-1" />
 
-                  {/* CERRAR SESIÓN */}
+                  {/* LOGOUT */}
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-2 text-red-600 font-semibold text-sm hover:bg-red-50 transition"
