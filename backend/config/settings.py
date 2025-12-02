@@ -79,10 +79,15 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # -----------------------------
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'vetyon',
+        'USER': 'postgres',
+        'PASSWORD': 'Vetyon2025!',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
+
 
 # -----------------------------
 # AUTENTICACIÓN Y JWT
@@ -142,8 +147,8 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
 # ⚠️ Reemplaza con tus credenciales
-EMAIL_HOST_USER = "vetcare.alertas@gmail.com"       # ← tu nuevo correo
-EMAIL_HOST_PASSWORD = "onkdrpqenxttilni"            # ← tu clave de aplicación
+EMAIL_HOST_USER = "vetyon.alertas@gmail.com"
+EMAIL_HOST_PASSWORD = "wostfftybbgjhojz"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # -----------------------------

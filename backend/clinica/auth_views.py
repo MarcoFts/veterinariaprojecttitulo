@@ -17,8 +17,12 @@ from .models import Cliente
 
 
 User = get_user_model()
+
+
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
+
+
 # -----------------------------
 # LOGIN
 # -----------------------------
@@ -94,33 +98,43 @@ class RegisterView(APIView):
         Cliente.objects.get_or_create(user=user)
 
         # -----------------------------
-        # Enviar correo de bienvenida HTML
+        # Enviar correo de bienvenida HTML (Vetyon)
         # -----------------------------
         try:
-            html_message = render_to_string('emails/bienvenida.html', {'username': first_name})
-            plain_message = f"Hola {first_name}, tu registro en VetCare fue exitoso. ¡Gracias por unirte!"
+            html_message = render_to_string(
+                "emails/bienvenida.html",
+                {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "full_name": f"{first_name} {last_name}"
+                }
+            )
+
+            plain_message = (
+                f"Hola {first_name}, tu registro en Vetyon fue exitoso. "
+                f"Ya puedes iniciar sesión en la plataforma."
+            )
 
             msg = EmailMultiAlternatives(
-                subject="Bienvenido a VetCare 🐾",
+                subject="Bienvenido a Vetyon",
                 body=plain_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[email]
+                to=[email],
             )
             msg.attach_alternative(html_message, "text/html")
             msg.send()
 
-            print(f"💌 Correo HTML enviado correctamente a {email}")
+            print(f"💌 Correo HTML de bienvenida enviado correctamente a {email}")
 
         except Exception as e:
-            print("⚠️ Error enviando correo HTML:", e)
+            print("⚠️ Error enviando correo HTML de bienvenida:", e)
 
         return Response(
-            {"detail": "Usuario creado correctamente, ficha de cliente creada y correo HTML enviado."},
+            {
+                "detail": "Usuario creado correctamente, ficha de cliente creada y correo HTML enviado."
+            },
             status=201,
         )
-
-
-
 
 
 # -----------------------------
@@ -139,27 +153,39 @@ class PasswordResetRequestView(APIView):
         except User.DoesNotExist:
             return Response({"error": "No existe una cuenta con ese correo."}, status=404)
 
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        # Enlace al frontend (ajústalo si usas otro dominio)
-        reset_link = f"http://localhost:5173/reset-password/{uid}/{token}/"
+        reset_link = f"http://localhost:5173/reset-password/{uidb64}/{token}"
 
-        # 💌 Enviar correo HTML con diseño VetCare
+
+        print("RESET LINK ENVIADO:", reset_link)  # 👈 para que lo veas en la consola
+
+        # 3) enviar correo HTML
         try:
-            # Renderizar plantilla HTML
-            html_message = render_to_string('emails/reset_password.html', {
-                'username': user.username,
-                'reset_link': reset_link,
-            })
-            # Versión de texto simple (por compatibilidad)
-            plain_message = f"Hola {user.username}, usa este enlace para restablecer tu contraseña: {reset_link}"
+            html_message = render_to_string(
+                "emails/reset_password.html",
+                {
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "full_name": f"{user.first_name} {user.last_name}",
+                    "reset_link": reset_link,
+                },
+            )
+
+            plain_message = (
+                f"Hola {user.first_name} {user.last_name},\n\n"
+                f"Recibimos una solicitud para restablecer tu contraseña en Vetyon.\n"
+                f"Puedes usar el siguiente enlace para crear una nueva contraseña:\n\n"
+                f"{reset_link}\n\n"
+                f"Si no solicitaste este cambio, puedes ignorar este mensaje."
+            )
 
             msg = EmailMultiAlternatives(
-                subject="Recuperación de contraseña - VetCare 🐾",
+                subject="Recuperación de contraseña - Vetyon",
                 body=plain_message,
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email]
+                to=[user.email],
             )
             msg.attach_alternative(html_message, "text/html")
             msg.send()
@@ -172,8 +198,9 @@ class PasswordResetRequestView(APIView):
 
         return Response(
             {"message": "Se envió un enlace de recuperación al correo."},
-            status=200
+            status=200,
         )
+
 
 
 # -----------------------------
@@ -201,17 +228,35 @@ class PasswordResetConfirmView(APIView):
         user.set_password(new_password)
         user.save()
 
+        # 💌 Correo HTML de confirmación de cambio de contraseña
         try:
-            send_mail(
-                subject="Tu contraseña ha sido actualizada - VetCare 🐾",
-                message=f"Hola {user.username}, tu contraseña fue cambiada correctamente.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
-                fail_silently=False,
+            html_message = render_to_string(
+                "emails/password_changed.html",
+                {
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "full_name": f"{user.first_name} {user.last_name}"
+                },
             )
-        except Exception as e:
-            print("Error enviando correo de confirmación:", e)
 
-        return Response(
-            {"message": "Contraseña actualizada correctamente."}, status=200
-        )
+            plain_message = (
+                f"Hola {user.first_name} {user.last_name},\n\n"
+                f"Tu contraseña en Vetyon fue cambiada correctamente.\n"
+                f"Si no fuiste tú, restablécela nuevamente y contacta a soporte."
+            )
+
+            msg = EmailMultiAlternatives(
+                subject="Tu contraseña ha sido actualizada - Vetyon",
+                body=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email],
+            )
+            msg.attach_alternative(html_message, "text/html")
+            msg.send()
+
+            print(f"💌 Correo HTML de cambio de contraseña enviado correctamente a {user.email}")
+
+        except Exception as e:
+            print("⚠️ Error enviando correo de confirmación:", e)
+
+

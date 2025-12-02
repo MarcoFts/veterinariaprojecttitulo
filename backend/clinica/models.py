@@ -52,7 +52,11 @@ class Mascota(models.Model):
         blank=True,
     )
     esterilizado = models.BooleanField(default=False)
-    microchip = models.CharField("Microchip", max_length=50, null=True, blank=True)
+    microchip = models.CharField(
+    max_length=2,
+    choices=[("Si", "Si"), ("No", "No")],
+    default="No"
+    )
     notas_salud = models.TextField(blank=True)
 
     def __str__(self):
@@ -99,7 +103,7 @@ class Cita(models.Model):
         choices=ESTADOS,
         default="pendiente",
     )
-    motivo = models.CharField(max_length=255, blank=True, default="")
+    motivo = models.CharField(max_length=255, blank=True, default="", null=True)
 
     creada_por = models.ForeignKey(
         User,

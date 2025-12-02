@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
+from django.shortcuts import get_object_or_404
 from .models import (
     Cliente,
     Mascota,
@@ -19,45 +20,85 @@ User = get_user_model()
 # ---------- Cliente / Mascota ----------
 
 class MascotaSerializer(serializers.ModelSerializer):
-    # Campos calculados para el tutor/cliente
+    # Cambios IMPORTANTES → ahora microchip permite null y blank
+    microchip = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True
+    )
+
     dueno_nombre = serializers.SerializerMethodField()
     dueno_telefono = serializers.SerializerMethodField()
     dueno_rut = serializers.SerializerMethodField()
-    # Campos útiles para el frontend
     cliente_id = serializers.IntegerField(source="cliente.id", read_only=True)
     cliente_nombre = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Mascota
         exclude = ("cliente",)
 
+    # -------------------------
+    # NORMALIZACIÓN AUTOMÁTICA
+    # -------------------------
+    def validate_nombre(self, value):
+        return value.strip().capitalize()
+
+    def validate_especie(self, value):
+        return value.strip().capitalize()
+
+    def validate_raza(self, value):
+        return value.strip().capitalize()
+
+    def validate_microchip(self, value):
+        """
+        Acepta:
+        - "Si"
+        - "No"
+        - vacío
+        - null
+        """
+        if value in [None, "", " ", "null"]:
+            return None
+
+        v = value.strip().capitalize()
+
+        if v not in ["Si", "No"]:
+            raise serializers.ValidationError(
+                "El microchip debe ser 'Si', 'No' o vacío."
+            )
+
+        return v
+
+    def validate_fecha_nacimiento(self, value):
+        from datetime import date
+        if value > date.today():
+            raise serializers.ValidationError("La fecha no puede ser futura.")
+        return value
+
+    # -------------------------
+    # CAMPOS DEL DUEÑO
+    # -------------------------
     def get_dueno_nombre(self, obj):
         cliente = getattr(obj, "cliente", None)
         if not cliente:
             return None
-
         u = getattr(cliente, "user", None)
         if not u:
             return f"Cliente {cliente.pk}"
-
         full = f"{u.first_name} {u.last_name}".strip()
         return full or u.email or u.username
 
     def get_dueno_telefono(self, obj):
-        cliente = getattr(obj, "cliente", None)
-        if not cliente:
-            return None
-        return getattr(cliente, "telefono", None)
+        cli = getattr(obj, "cliente", None)
+        return getattr(cli, "telefono", None) if cli else None
 
     def get_dueno_rut(self, obj):
-        cliente = getattr(obj, "cliente", None)
-        if not cliente:
-            return None
-        return getattr(cliente, "rut_dni", None)
+        cli = getattr(obj, "cliente", None)
+        return getattr(cli, "rut_dni", None) if cli else None
 
     def get_cliente_nombre(self, obj):
-        # Reutilizamos la misma lógica del nombre del dueño
         return self.get_dueno_nombre(obj)
+
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -181,12 +222,30 @@ class RegisterSerializer(serializers.Serializer):
 # ---------- Citas ----------
 
 class CitaSerializer(serializers.ModelSerializer):
+    cliente_id = serializers.IntegerField(write_only=True, required=True)
+    mascota_id = serializers.IntegerField(write_only=True, required=True)
+
     veterinario_nombre = serializers.SerializerMethodField()
     mascota_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Cita
-        fields = "__all__"
+        fields = [
+            "id",
+            "cliente_id",
+            "mascota_id",
+            "cliente",
+            "mascota",
+            "veterinario",
+            "veterinario_nombre",
+            "mascota_nombre",
+            "motivo",
+            "inicio",
+            "fin",
+            "box",
+            "estado",
+        ]
+        read_only_fields = ["cliente", "mascota", "veterinario", "estado"]
 
     def get_veterinario_nombre(self, obj):
         if obj.veterinario:
@@ -197,39 +256,12 @@ class CitaSerializer(serializers.ModelSerializer):
     def get_mascota_nombre(self, obj):
         return obj.mascota.nombre if obj.mascota else ""
 
-    def validate(self, data):
-        """
-        - Valida que fin > inicio
-        - Valida que no se solapen citas (pendiente/confirmada) para el mismo box/veterinario
-        """
-        inicio = data["inicio"]
-        fin = data["fin"]
-        if fin <= inicio:
-            raise serializers.ValidationError(
-                {"fin": "La hora de término debe ser mayor al inicio."}
-            )
+    # ❌ BORRADO create() — ahora el ViewSet maneja todo
 
-        vet = data.get("veterinario")
-        box = data.get("box") or "BOX-1"
 
-        qs = Cita.objects.filter(
-            estado__in=["pendiente", "confirmada"],
-            box=box,
-        )
-        if vet:
-            qs = qs.filter(veterinario=vet)
 
-        # si estamos editando, excluir la cita actual
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
 
-        # ¿hay alguna cita que se cruce con [inicio, fin]?
-        if qs.filter(inicio__lt=fin, fin__gt=inicio).exists():
-            raise serializers.ValidationError(
-                "Existe una cita solapada para ese horario/box/veterinario."
-            )
 
-        return data
 
 class RegistroClinicoSerializer(serializers.ModelSerializer):
     veterinario_nombre = serializers.SerializerMethodField()

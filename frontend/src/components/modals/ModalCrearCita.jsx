@@ -8,6 +8,8 @@ import {
   getMascotas,
   getMotivosConsulta,
 } from "../../services/api";
+import { crearCita } from "../../services/citas";
+
 
 dayjs.locale("es");
 
@@ -185,63 +187,60 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!slot) return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!slot) return;
 
-    if (!form.cliente || !form.mascota) {
-      alert("Debes seleccionar cliente y mascota.");
-      return;
-    }
+  if (!form.cliente || !form.mascota) {
+    alert("Debes seleccionar cliente y mascota.");
+    return;
+  }
 
-    if (!form.motivo) {
-      alert("Debes seleccionar un motivo de consulta.");
-      return;
-    }
+  if (!form.motivo) {
+    alert("Debes seleccionar un motivo de consulta.");
+    return;
+  }
 
-    if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
-      alert("Por favor escribe el motivo de la consulta.");
-      return;
-    }
+  if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
+    alert("Por favor escribe el motivo de la consulta.");
+    return;
+  }
 
-    const clienteSel = clientes.find(
-      (c) => String(c.id) === String(form.cliente)
-    );
-    const mascotaSel = mascotasCliente.find(
-      (m) => String(m.id) === String(form.mascota)
-    );
+  const motivoFinal =
+    form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro.trim() : form.motivo;
 
-    const clienteNombre =
-      clienteSel?.nombre_completo ||
-      clienteSel?.nombre ||
-      clienteSel?.email ||
-      (clienteSel ? `Cliente #${clienteSel.id}` : "");
+  const fechaISO = slot.fecha;
+  const inicioISO = `${fechaISO}T${slot.horaInicio}:00`;
+  const finISO = `${fechaISO}T${slot.horaFin}:00`;
 
-    const mascotaNombre = mascotaSel?.nombre || "";
-
-    const motivoFinal =
-      form.motivo === LABEL_OTRO_MOTIVO
-        ? form.motivoOtro.trim()
-        : form.motivo;
-
-    const payload = {
-      slot_id: slot.id,
-      cliente_id: form.cliente,
-      cliente_nombre: clienteNombre,
-      mascota_id: form.mascota,
-      mascota_nombre: mascotaNombre,
-      motivo: motivoFinal,
-      box: form.box || "",
-    };
-
-    setSaving(true);
-    try {
-      onConfirm && onConfirm(payload);
-      onClose && onClose();
-    } finally {
-      setSaving(false);
-    }
+  const payload = {
+    cliente_id: form.cliente,
+    mascota_id: form.mascota,
+    motivo: motivoFinal,
+    box: form.box || "",
+    inicio: inicioISO,
+    fin: finISO,
   };
+
+  setSaving(true);
+
+  try {
+    const res = await crearCita(payload);
+
+    // 🔥 REFRESCA AGENDA DEL VETERINARIO
+    if (onConfirm) onConfirm(res.data);
+
+    // Cierra modal
+    onClose && onClose();
+  } catch (error) {
+    console.error("Error al crear cita:", error);
+    alert("Error al crear la cita.");
+  } finally {
+    setSaving(false);
+  }
+};
+
+
 
   if (!open || !slot) return null;
 

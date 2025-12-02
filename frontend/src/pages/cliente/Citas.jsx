@@ -308,6 +308,7 @@ export default function Citas() {
 
   const handleSubmitCrear = async (e) => {
     e.preventDefault();
+
     if (!form.mascota || !form.veterinario || !form.fecha || !form.hora) {
       alert(
         "Debes seleccionar mascota, veterinario, fecha y un horario disponible."
@@ -321,61 +322,90 @@ export default function Citas() {
       return;
     }
 
-    // Si seleccionó "Otro motivo", exigimos que escriba el texto
+    // Si seleccionó "Otro motivo", exigimos texto
     if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
       alert("Por favor escribe el motivo de la consulta.");
       return;
     }
 
-    const inicio = `${form.fecha}T${form.hora}`;
+    // Construir inicio y fin
+    const inicio = `${form.fecha}T${form.hora}:00`;
     const durMin = Number(form.duracion || 30);
-    const fin = dayjs(inicio).add(durMin, "minute").format("YYYY-MM-DDTHH:mm");
+    const fin = dayjs(inicio).add(durMin, "minute").format("YYYY-MM-DDTHH:mm:ss");
 
     const motivoFinal =
       form.motivo === LABEL_OTRO_MOTIVO
         ? form.motivoOtro.trim()
         : form.motivo || "";
 
-    // NO enviamos box: el vet/ backend se encargan
+    // 🔥🔥🔥 CORREGIDO PARA QUE EL BACKEND LO ACEPTE 🔥🔥🔥
+    // ⚠️ AGREGAR ESTO ARRIBA DEL PAYLOAD
+    const clienteId = localStorage.getItem("cliente_id");
+
+    // ⚠️ REEMPLAZAR EL PAYLOAD POR ESTE:
     const payload = {
-      mascota: form.mascota,
-      veterinario: form.veterinario,
+      cliente_id: Number(clienteId),        // ← OBLIGATORIO PARA EL BACKEND
+      mascota_id: Number(form.mascota),
+      veterinario_id: Number(form.veterinario),
       inicio,
       fin,
       motivo: motivoFinal,
+      box: "BOX-1",
     };
+
+
+    console.log("PAYLOAD →", payload);
 
     setLoadingForm(true);
     try {
       await crearCita(payload);
+
+      // limpiar formulario
       setForm((prev) => ({
         ...prev,
         hora: "",
         motivo: "",
         motivoOtro: "",
       }));
+
       setSlots([]);
+
+      // refrescar citas del día
       await cargarDatos();
     } catch (err) {
-      console.error(err);
-      alert("No se pudo crear la cita. Revisa los datos o la disponibilidad.");
+      console.error("ERROR CREAR CITA:", err.response?.data || err);
+      alert("No se pudo crear la cita. Revise disponibilidad o la hora seleccionada.");
     } finally {
       setLoadingForm(false);
     }
   };
 
-  // ---------- Cancelar cita ----------
 
-  const handleCancelarCita = async (citaId) => {
-    if (!window.confirm("¿Seguro que deseas cancelar esta cita?")) return;
-    try {
-      await cancelarCita(citaId);
-      await cargarDatos();
-    } catch (err) {
-      console.error(err);
-      alert("No se pudo cancelar la cita.");
-    }
-  };
+    // ---------- Cancelar cita ----------
+
+    // --- Mini modal de confirmación ---
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmCitaId, setConfirmCitaId] = useState(null);
+
+    // ---------- Cancelar cita ----------
+    const handleCancelarCita = (citaId) => {
+      setConfirmCitaId(citaId);
+      setConfirmOpen(true);
+    };
+
+    const confirmarCancelacion = async () => {
+      try {
+        await cancelarCita(confirmCitaId);
+        await cargarDatos();
+      } catch (err) {
+        console.error(err);
+        alert("No se pudo cancelar la cita.");
+      } finally {
+        setConfirmOpen(false);
+        setConfirmCitaId(null);
+      }
+    };
+
 
   // ---------- Reprogramar (cliente) ----------
 
@@ -510,7 +540,7 @@ export default function Citas() {
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VETCARE · CLIENTE
+              VETYON · CLIENTE
             </p>
             <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
               Agenda tus citas
@@ -1008,6 +1038,52 @@ export default function Citas() {
             </div>
           </div>
         )}
+        {/* Modal reprogramar */}
+      {showModal && selectedCita && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-5">
+            <h3 className="text-base font-semibold text-slate-900 mb-3">
+              Reprogramar cita #{selectedCita.id}
+            </h3>
+
+            <form onSubmit={handleSubmitReprogramar} className="space-y-4">
+              {/* Mini calendario */}
+              {/* ... todo el código que ya tienes ... */}
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐⭐⭐ MINI-MODAL PREMIUM DE CANCELACIÓN ⭐⭐⭐ */}
+      {confirmOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-[9999]">
+          <div className="bg-white p-6 rounded-xl shadow-xl w-[90%] max-w-sm border border-neutral-200 animate-fadeScale">
+
+            <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+              ¿Cancelar cita?
+            </h2>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmOpen(false)}
+                className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-700 hover:bg-neutral-300 transition"
+              >
+                No
+              </button>
+
+              <button
+                onClick={confirmarCancelacion}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+              >
+                Sí, cancelar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+      {/* ⭐⭐⭐ FIN MINI-MODAL ⭐⭐⭐ */}
       </div>
     </LayoutCliente>
   );

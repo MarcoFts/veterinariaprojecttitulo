@@ -734,14 +734,17 @@ export default function VetAgendaDia() {
           </div>
         </section>
       </div>
-
-      {/* Modal crear cita */}
+      
       <ModalCrearCita
         open={!!slotParaAsignar}
         slot={slotParaAsignar}
         onClose={() => setSlotParaAsignar(null)}
-        onConfirm={handleAsignarConfirm}
+        onConfirm={(data) => {
+          handleAsignarConfirm(data);      // actualiza UI inmediata
+          setReloadAgenda((n) => n + 1);   // 🔥 fuerza recarga del backend
+        }}
       />
+
 
       {/* Modal reprogramar */}
       <ModalReprogramarCita

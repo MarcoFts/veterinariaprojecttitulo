@@ -84,7 +84,7 @@ export default function Registro() {
   };
 
   return (
-    <div className="min-h-screen bg-[#e8f4ff] flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8">
 
         {/* PANEL IZQUIERDO – DISEÑO PREMIUM */}

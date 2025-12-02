@@ -11,7 +11,22 @@ import {
   ScanLine,
   FileText,
 } from "lucide-react";
-import api from "../../services/api"; // instancia axios
+import api from "../../services/api";
+
+// ---------------------------------------------------------
+// OBTENER user_id DEL TOKEN JWT PARA cliente_id
+// ---------------------------------------------------------
+const getUserIdFromToken = () => {
+  try {
+    const token = localStorage.getItem("access");
+    if (!token) return null;
+
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.user_id || payload.user || null;
+  } catch {
+    return null;
+  }
+};
 
 export default function RegistrarMascota() {
   const navigate = useNavigate();
@@ -30,24 +45,80 @@ export default function RegistrarMascota() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showDateAlert, setShowDateAlert] = useState(false);
+
+  // ---------------------------------------------------------
+  // VALIDAR FECHA FUTURA
+  // ---------------------------------------------------------
+  const isFutureDate = (dateStr) => {
+    if (!dateStr) return false;
+    const today = new Date();
+    const selected = new Date(dateStr);
+    return selected > today;
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
     setPet((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+
+    if (name === "fechaNacimiento" && value) {
+      if (isFutureDate(value)) {
+        setShowDateAlert(true);
+      }
+    }
   };
 
+  // ---------------------------------------------------------
+  // NORMALIZAR ESPECIE
+  // ---------------------------------------------------------
+  const normalizeSpecies = (value) =>
+    value ? value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() : "";
+
+  // ---------------------------------------------------------
+  // MICROCHIP → BOOLEANO
+  // ---------------------------------------------------------
+  const normalizeMicrochip = (value) => {
+    if (!value || value.trim() === "") return null;     // ← opcional
+    const v = value.trim().toLowerCase();
+
+    if (v === "si" || v === "sí") return "Si";
+    if (v === "no") return "No";
+
+    return null; // si escribe cualquier cosa → null
+  };
+
+
+  // ---------------------------------------------------------
+  // SUBMIT
+  // ---------------------------------------------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError("");
-  
+
+    if (isFutureDate(pet.fechaNacimiento)) {
+      setSaving(false);
+      setShowDateAlert(true);
+      return;
+    }
+
+    // 🔥 OBTENER ID DEL USUARIO PARA cliente_id (POSTGRES OBLIGA)
+    const clienteId = getUserIdFromToken();
+    if (!clienteId) {
+      setSaving(false);
+      setError("No se encontró un cliente válido.");
+      return;
+    }
+
     try {
       const payload = {
+        cliente_id: clienteId, // 🔥 requerido por PostgreSQL
         nombre: pet.nombre,
-        especie: pet.especie,
+        especie: normalizeSpecies(pet.especie),
         raza: pet.raza || null,
         sexo:
           pet.sexo === "macho"
@@ -55,24 +126,28 @@ export default function RegistrarMascota() {
             : pet.sexo === "hembra"
             ? "Hembra"
             : "No informado",
+
         fecha_nacimiento: pet.fechaNacimiento || null,
         peso_kg: pet.peso ? Number(pet.peso) : null,
         esterilizado: !!pet.esterilizado,
-        microchip: pet.microchip || null,
+
+        // 🔥 AHORA BOOLEANO REAL, NO STRING
+        microchip: normalizeMicrochip(pet.microchip),
+
         notas_salud: pet.notas || "",
       };
-  
+
       await api.post("/mascotas/", payload);
-  
+
       setSaving(false);
-      navigate("/cliente/home"); // <- IMPORTANTE: ruta existe
+      navigate("/cliente/home");
     } catch (err) {
       setSaving(false);
       setError("No se pudo registrar la mascota.");
       console.log(err?.response?.data);
     }
-  };  
-  
+  };
+
   return (
     <LayoutCliente>
       <div className="space-y-8">
@@ -160,9 +235,7 @@ export default function RegistrarMascota() {
             {/* Sexo / fecha nacimiento */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600">
-                  Sexo
-                </label>
+                <label className="text-xs font-medium text-slate-600">Sexo</label>
                 <select
                   name="sexo"
                   value={pet.sexo}
@@ -231,15 +304,14 @@ export default function RegistrarMascota() {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
                 <ScanLine size={14} className="text-sky-500" />
-                Microchip{" "}
-                <span className="text-[11px] text-slate-400">(opcional)</span>
+                Microchip <span className="text-[11px] text-slate-400">(opcional)</span>
               </label>
               <input
                 type="text"
                 name="microchip"
                 value={pet.microchip}
                 onChange={handleChange}
-                placeholder="Código de microchip si lo tiene"
+                placeholder="Si / No"
                 className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
               />
             </div>
@@ -255,21 +327,19 @@ export default function RegistrarMascota() {
                 value={pet.notas}
                 onChange={handleChange}
                 rows={4}
-                placeholder="Alergias, medicamentos, enfermedades crónicas, indicaciones del veterinario, etc."
+                placeholder="Alergias, medicamentos, enfermedades crónicas..."
                 className="w-full rounded-xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 resize-none"
               />
             </div>
 
-            {/* Error */}
             {error && (
               <p className="text-red-600 text-sm mt-2">{error}</p>
             )}
 
-            {/* Footer / CTA */}
+            {/* Footer */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
               <p className="text-[11px] text-slate-400 max-w-md">
-                *La información será utilizada para facilitar tus próximas
-                reservas y controles. No se compartirá con terceros.
+                *La información será utilizada para facilitar tus próximas reservas.
               </p>
 
               <button
@@ -287,6 +357,29 @@ export default function RegistrarMascota() {
           </form>
         </section>
       </div>
+
+    {/* POPUP FECHA FUTURA */}
+    {showDateAlert && (
+      <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4">
+        <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
+
+          <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+            Fecha inválida
+          </h2>
+
+          <p className="text-neutral-600 text-sm mb-6">
+            La fecha de nacimiento no puede ser en el futuro.
+          </p>
+
+          <button
+            onClick={() => setShowDateAlert(false)}
+            className="w-full py-2 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700 transition"
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    )}
     </LayoutCliente>
   );
 }

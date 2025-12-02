@@ -3,7 +3,7 @@ import { CheckCircle } from "lucide-react";
 
 export default function CuentaCreada() {
   return (
-    <div className="min-h-screen bg-[#e8f4ff] flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-xl border border-slate-200 p-10 text-center animate-fadeIn">
         
         {/* Ícono éxito */}

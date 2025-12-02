@@ -1,13 +1,13 @@
 // src/pages/auth/ClienteLogin.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import api, { login as apiLogin } from "../../services/api"; // axios + helper login
+import api, { login as apiLogin } from "../../services/api";
 import { setTokens } from "../../auth";
 import { useAuth } from "../../context/AuthContext";
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
-  const { login: setAuthUser } = useAuth(); // del AuthContext
+  const { login: setAuthUser } = useAuth();
 
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -22,9 +22,8 @@ export default function ClienteLogin() {
     setLoading(true);
 
     try {
-      // 1) Login en backend
       const resp = await apiLogin(form.email, form.password);
-      const { access, refresh } = resp.data; // JWT SimpleJWT típico
+      const { access, refresh } = resp.data;
 
       if (!access) {
         setError("No se recibió token de acceso. Revisa credenciales.");
@@ -32,12 +31,14 @@ export default function ClienteLogin() {
         return;
       }
 
-      // 2) Guardar tokens (localStorage + headers axios, según tu auth.js)
       setTokens({ access, refresh });
 
-      // 3) Consultar perfil para validar que es CLIENTE
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
+
+      // 🔥 GUARDA cliente_id EN LOCALSTORAGE (OBLIGATORIO)
+      localStorage.setItem("cliente_id", me.cliente_id);
+
 
       if (!me?.cliente_id) {
         setError("Esta cuenta no está registrada como cliente.");
@@ -45,7 +46,6 @@ export default function ClienteLogin() {
         return;
       }
 
-      // 4) Guardar usuario en AuthContext
       const userParaContexto = {
         id: me.id,
         email: me.email,
@@ -56,10 +56,8 @@ export default function ClienteLogin() {
         is_staff: me.is_staff,
       };
 
-      // tokens ya se guardaron con setTokens
       setAuthUser(userParaContexto);
 
-      // 5) Redirigir al home de cliente
       navigate("/cliente/home", { replace: true });
     } catch (err) {
       console.error("Error en login cliente:", err?.response?.data || err);
@@ -76,10 +74,11 @@ export default function ClienteLogin() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
+
         {/* ENCABEZADO */}
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] uppercase text-sky-600 mb-2">
-            Vetyon · CLIENTE
+            VETYON · CLIENTE
           </p>
           <h1 className="text-2xl font-bold text-slate-900">
             Iniciar sesión como Cliente
@@ -100,10 +99,7 @@ export default function ClienteLogin() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* EMAIL */}
           <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
               Correo electrónico
             </label>
             <input
@@ -121,10 +117,7 @@ export default function ClienteLogin() {
 
           {/* PASSWORD */}
           <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
               Contraseña
             </label>
             <input
@@ -151,32 +144,45 @@ export default function ClienteLogin() {
           </button>
         </form>
 
-        {/* REGISTRO / CAMBIO DE ACCESO */}
-        <div className="mt-6 text-center text-xs text-slate-500">
-          ¿No tienes cuenta?{" "}
-          <Link
-            to="/registro"
-            className="font-semibold text-sky-600 hover:text-blue-700"
-          >
-            Crear cuenta
-          </Link>
+        {/* 🔹 RECUPERAR CONTRASEÑA */}
+        <div className="mt-8 flex flex-col items-center text-center text-xs text-slate-500 space-y-2">
+
+          {/* Recuperar contraseña */}
+          <div>
+            ¿Olvidaste tu contraseña?{" "}
+            <Link
+              to="/forgot-password"
+              className="font-semibold text-sky-600 hover:text-blue-700"
+            >
+              Recuperar contraseña
+            </Link>
+          </div>
+
+          {/* Crear cuenta */}
+          <div>
+            ¿No tienes cuenta?{" "}
+            <Link
+              to="/registro"
+              className="font-semibold text-sky-600 hover:text-blue-700"
+            >
+              Crear cuenta
+            </Link>
+          </div>
+
+          {/* Acceso veterinario */}
+          <div>
+            ¿Eres veterinario?{" "}
+            <Link
+              to="/login/veterinario"
+              className="font-semibold text-sky-600 hover:text-blue-700"
+            >
+              Ir al acceso de veterinario
+            </Link>
+          </div>
         </div>
 
-        <div className="mt-2 text-center text-xs text-slate-500">
-          ¿Eres veterinario?{" "}
-          <Link
-            to="/login/veterinario"
-            className="font-semibold text-sky-600 hover:text-blue-700"
-          >
-            Ir al acceso de veterinario
-          </Link>
-        </div>
-
-        <p className="mt-3 text-[11px] text-slate-400 text-center">
-          *Autenticación conectada al backend con JWT.*
-        </p>
-
-        <div className="mt-4 text-center">
+        {/* Volver al inicio */}
+        <div className="mt-6 text-center">
           <Link
             to="/"
             className="text-xs font-medium text-sky-600 hover:text-blue-700"
@@ -184,6 +190,7 @@ export default function ClienteLogin() {
             Volver al inicio
           </Link>
         </div>
+
       </div>
     </div>
   );

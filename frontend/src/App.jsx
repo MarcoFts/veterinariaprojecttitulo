@@ -8,6 +8,8 @@ import ClienteLogin from "./pages/auth/ClienteLogin";
 import VeterinarioLogin from "./pages/auth/VeterinarioLogin";
 import Registro from "./pages/auth/Registro";
 import CuentaCreada from "./pages/auth/CuentaCreada";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 
 // Cliente
 import ClienteHome from "./pages/cliente/ClienteHome";
@@ -26,6 +28,7 @@ import VetHorarios from "./pages/veterinario/VetHorarios";
 function App() {
   return (
     <Routes>
+
       {/* Root → selección */}
       <Route path="/" element={<Navigate to="/seleccion-login" replace />} />
 
@@ -36,11 +39,15 @@ function App() {
       <Route path="/registro" element={<Registro />} />
       <Route path="/cuenta-creada" element={<CuentaCreada />} />
 
-      {/* Logins */}
+      {/* Login */}
       <Route path="/login/cliente" element={<ClienteLogin />} />
       <Route path="/login/veterinario" element={<VeterinarioLogin />} />
 
-      {/* Cliente (PROTEGIDAS) */}
+      {/* Recuperación de contraseña */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:uidb64/:token" element={<ResetPassword />} />
+
+      {/* Cliente (protegidas) */}
       <Route
         path="/cliente/home"
         element={
@@ -66,7 +73,7 @@ function App() {
         }
       />
 
-      {/* Veterinario (PROTEGIDAS) */}
+      {/* Veterinario (protegidas) */}
       <Route
         path="/veterinario/home"
         element={
@@ -126,6 +133,7 @@ function App() {
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/seleccion-login" replace />} />
+
     </Routes>
   );
 }
