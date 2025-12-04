@@ -5,9 +5,10 @@ from django.utils import timezone
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from .email_utils import enviar_notificacion_cita
-
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from rest_framework import viewsets, status, mixins, serializers as drf_serializers
-from rest_framework import serializers
+from rest_framework import serializers, permissions
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -123,7 +124,6 @@ class MascotaViewSet(viewsets.ModelViewSet):
 
 # ---------- HORARIOS DE ATENCIÓN ----------
 class HorarioAtencionViewSet(viewsets.ModelViewSet):
-
     queryset = HorarioAtencion.objects.all()
     serializer_class = HorarioAtencionSerializer
     permission_classes = [IsAuthenticated]
@@ -132,12 +132,15 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         u = self.request.user
 
-        if u.is_staff or u.is_superuser:
-            return qs.order_by("veterinario_id", "dia_semana", "inicio")
-
-        if user_is_vet(u):
+        # 1 Veterinario logeado → solo sus horarios
+        if user_is_vet(u) and not u.is_superuser:
             return qs.filter(veterinario=u).order_by("dia_semana", "inicio")
 
+        # 2 Admin / staff → pueden ver todo
+        if u.is_superuser or u.is_staff:
+            return qs.order_by("veterinario_id", "dia_semana", "inicio")
+
+        # 3 Otros → nada
         return qs.none()
 
     def perform_create(self, serializer):
@@ -218,7 +221,6 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
 
 # ---------- CITAS ----------
 class CitaViewSet(viewsets.ModelViewSet):
-
     queryset = Cita.objects.all().select_related("cliente", "mascota", "veterinario")
     serializer_class = CitaSerializer
     permission_classes = [IsAuthenticated]
@@ -230,15 +232,21 @@ class CitaViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return qs.none()
 
-        if user.is_superuser or user.is_staff:
-            base_qs = qs
-        elif user_is_vet(user):
+        # 1 Primero: si es veterinario (aunque tenga is_staff)
+        if user_is_vet(user) and not user.is_superuser:
             base_qs = qs.filter(veterinario=user)
+
+        # 2 Luego: admin / staff de la clínica
+        elif user.is_superuser or user.is_staff:
+            base_qs = qs
+
+        # 3 Cliente: solo sus propias citas
         elif user_is_client(user):
             base_qs = qs.filter(cliente__user=user)
         else:
             base_qs = qs.none()
 
+        # Filtro por fecha opcional ?fecha=YYYY-MM-DD
         fecha_str = self.request.query_params.get("fecha")
         if fecha_str:
             try:
@@ -523,31 +531,76 @@ class InventarioViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
 
 # ---------- REGISTRO ----------
 class RegisterView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        ser = RegisterSerializer(data=request.data)
-        if ser.is_valid():
-            user = ser.save()
-            refresh = RefreshToken.for_user(user)
-            return Response(
-                {
-                    "message": "Registro exitoso",
-                    "user": {
-                        "id": user.id,
-                        "email": user.email,
-                        "name": f"{user.first_name} {user.last_name}".strip(),
-                    },
-                    "tokens": {
-                        "access": str(refresh.access_token),
-                        "refresh": str(refresh),
-                    },
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(ser.errors, status=status.HTTP_400_BAD_REQUEST)
+        print(">>> Datos recibidos:", request.data)
 
+        email = (request.data.get("email") or "").strip().lower()
+        password = request.data.get("password") or ""
+        password2 = request.data.get("password2") or ""
+
+        first_name = (request.data.get("first_name") or "").strip()
+        last_name = (request.data.get("last_name") or "").strip()
+
+        telefono = (request.data.get("telefono") or "").strip()
+        direccion = (request.data.get("direccion") or "").strip()
+        rut_dni = (request.data.get("rut_dni") or "").strip()
+        acepta_comunicaciones = bool(request.data.get("acepta_comunicaciones", True))
+
+        errors = {}
+
+        if not first_name:
+            errors["first_name"] = "Obligatorio."
+        if not last_name:
+            errors["last_name"] = "Obligatorio."
+        if not email:
+            errors["email"] = "Obligatorio."
+        if not password:
+            errors["password"] = "Obligatorio."
+        elif len(password) < 8:
+            errors["password"] = "Mínimo 8 caracteres."
+        if not password2:
+            errors["password2"] = "Repite tu contraseña."
+        elif password2 != password:
+            errors["password2"] = "Las contraseñas no coinciden."
+
+        if email and User.objects.filter(email=email).exists():
+            errors["email"] = "Ya existe una cuenta con ese correo."
+
+        if errors:
+            return Response(errors, status=400)
+
+        username = email  # 👈 así evitamos usernames duplicados
+
+        try:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+            )
+        except Exception as e:
+            print(">>> Error al crear usuario:", e)
+            return Response({"detail": "Error al crear usuario."}, status=400)
+
+        Cliente.objects.update_or_create(
+            user=user,
+            defaults={
+                "telefono": telefono,
+                "direccion": direccion,
+                "rut_dni": rut_dni,
+                "acepta_comunicaciones": acepta_comunicaciones,
+            },
+        )
+
+        # (correo de bienvenida opcional...)
+
+        return Response(
+            {"detail": "Usuario creado correctamente."},
+            status=201,
+        )
 
 # ---------- PERFIL ----------
 @api_view(["GET"])
@@ -572,11 +625,11 @@ def me(request):
 @permission_classes([IsAuthenticated])
 def veterinarios(request):
     qs = User.objects.filter(
-        Q(groups__name__iexact="veterinarios") | Q(is_staff=True)
+        groups__name__iexact="veterinarios",
+        is_superuser=False,
     ).distinct()
     serializer = VeterinarioSerializer(qs, many=True)
     return Response(serializer.data)
-
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -705,7 +758,6 @@ class RegistroClinicoViewSet(viewsets.ModelViewSet):
             return qs.filter(mascota__cliente=user.cliente)
 
         return qs.none()
-
 
 # ---------- MOTIVOS DE CONSULTA ----------
 MOTIVOS_CONSULTA_OPCIONES = [

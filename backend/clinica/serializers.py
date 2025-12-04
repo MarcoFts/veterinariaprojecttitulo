@@ -7,6 +7,7 @@ from .models import (
     Mascota,
     Cita,
     Producto,
+    RegistroClinicoProducto,
     MovimientoInventario,
     HorarioAtencion,
     BloqueoAgenda,
@@ -257,15 +258,32 @@ class CitaSerializer(serializers.ModelSerializer):
         return obj.mascota.nombre if obj.mascota else ""
 
     # ❌ BORRADO create() — ahora el ViewSet maneja todo
+    
+class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.CharField(
+        source="producto.nombre", read_only=True
+    )
+    producto_codigo = serializers.CharField(
+        source="producto.codigo", read_only=True
+    )
 
-
-
-
-
+    class Meta:
+        model = RegistroClinicoProducto
+        fields = [
+            "id",
+            "producto",
+            "producto_nombre",
+            "producto_codigo",
+            "cantidad",
+            "tipo",
+        ]
 
 class RegistroClinicoSerializer(serializers.ModelSerializer):
     veterinario_nombre = serializers.SerializerMethodField()
     mascota_nombre = serializers.CharField(source="mascota.nombre", read_only=True)
+    items_tratamiento = RegistroClinicoProductoSerializer(
+        many=True, required=False
+    )
 
     class Meta:
         model = RegistroClinico
@@ -284,6 +302,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
             "medicamentos",
             "evolucion",
             "notas",
+            "items_tratamiento",   # 👈 NUEVO
         ]
         read_only_fields = ["veterinario", "veterinario_nombre"]
 
@@ -295,6 +314,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         """
         - El veterinario se toma del usuario logueado.
         - Si viene una cita asociada, la marca como 'completada'.
+        - Si vienen productos en items_tratamiento, los asocia y descuenta stock.
         """
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -314,8 +334,50 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         # Guardamos la cita (si existe) para actualizar su estado luego
         cita = validated_data.get("cita", None)
 
+        # Extra: productos usados en el tratamiento (vienen de request.data)
+        items_tratamiento_data = request.data.get("items_tratamiento", [])
+        # Si viene como JSON string, intenta parsear
+        if isinstance(items_tratamiento_data, str):
+            import json
+            try:
+                items_tratamiento_data = json.loads(items_tratamiento_data)
+            except Exception:
+                items_tratamiento_data = []
+
         # Creamos el registro clínico normalmente
         registro = super().create(validated_data)
+
+        # Asociamos productos y generamos movimientos de inventario
+        for item in items_tratamiento_data or []:
+            try:
+                producto_id = int(item.get("producto"))
+                cantidad = int(item.get("cantidad", 1))
+                tipo = item.get("tipo", "tratamiento") or "tratamiento"
+            except Exception:
+                continue
+
+            if cantidad <= 0:
+                continue
+
+            try:
+                producto = Producto.objects.get(pk=producto_id)
+            except Producto.DoesNotExist:
+                continue
+
+            RegistroClinicoProducto.objects.create(
+                registro=registro,
+                producto=producto,
+                cantidad=cantidad,
+                tipo=tipo,
+            )
+
+            # Movimiento de inventario (SALIDA)
+            MovimientoInventario.objects.create(
+                producto=producto,
+                tipo="salida",
+                cantidad=cantidad,
+                motivo=f"Uso en registro clínico #{registro.pk}",
+            )
 
         # Si había una cita asociada, la marcamos como 'completada'
         if cita is not None:
@@ -330,7 +392,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 pass
 
         return registro
-
+    
 # ---------- Inventario ----------
 
 class ProductoSerializer(serializers.ModelSerializer):

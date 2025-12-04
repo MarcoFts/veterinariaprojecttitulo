@@ -170,6 +170,36 @@ class RegistroClinico(models.Model):
     def __str__(self):
         return f"Registro {self.mascota} - {self.fecha:%Y-%m-%d %H:%M}"
 
+class RegistroClinicoProducto(models.Model):
+    TIPO_USO = (
+        ("tratamiento", "Tratamiento"),
+        ("vacuna", "Vacuna"),
+        ("antiparasitario", "Antiparasitario"),
+        ("otro", "Otro"),
+    )
+
+    registro = models.ForeignKey(
+        "RegistroClinico",
+        on_delete=models.CASCADE,
+        related_name="items_tratamiento",
+    )
+    # Usamos string porque Producto está definido más abajo
+    producto = models.ForeignKey(
+        "Producto",
+        on_delete=models.PROTECT,
+        related_name="usos_en_registros",
+    )
+    cantidad = models.PositiveIntegerField(default=1)
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_USO,
+        default="tratamiento",
+        blank=True,
+    )
+
+    def __str__(self):
+        return f"{self.producto.nombre} x{self.cantidad} ({self.get_tipo_display()})"
+
 class Producto(models.Model):
     nombre = models.CharField(max_length=150)
     codigo = models.CharField(max_length=50, unique=True)

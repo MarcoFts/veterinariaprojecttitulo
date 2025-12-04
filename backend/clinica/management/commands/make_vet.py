@@ -20,6 +20,5 @@ class Command(BaseCommand):
 
         vet_group, _ = Group.objects.get_or_create(name="veterinarios")
         user.groups.add(vet_group)
-        user.is_staff = True   # opcional; si no quieres, comenta esta línea
-        user.save(update_fields=["is_staff"])
+        user.save()
         self.stdout.write(self.style.SUCCESS(f"{email} ahora es veterinario."))

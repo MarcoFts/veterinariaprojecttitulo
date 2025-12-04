@@ -166,5 +166,8 @@ export function crearHorario(data) {
   // data: { dia_semana, hora_inicio, hora_fin }
   return api.post("/horarios/", data);
 }
+export function getProductos(params) {
+  return api.get("/productos/", { params });
+}
 
 export default api;

@@ -106,7 +106,7 @@ export default function ClienteHome() {
             </div>
 
             <Link
-              to="/cliente/citas"
+              to="/cliente/agendar"
               className="text-sm font-medium text-sky-600 hover:text-blue-700 transition"
             >
               Ver agenda →

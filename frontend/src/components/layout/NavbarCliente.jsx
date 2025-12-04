@@ -6,8 +6,9 @@ import { logout } from "../../auth";
 const navLinks = [
   { label: "Inicio", href: "/cliente/home", icon: Home },
   { label: "Mis citas", href: "/cliente/citas", icon: CalendarDays },
-  { label: "Mis mascotas", href: "/cliente/mis-mascotas", icon: PawPrint }, // 👈 NUEVO LISTADO
-  { label: "Registrar mascota", href: "/cliente/mascotas", icon: PawPrint }, // 👈 RENOMBRADO
+  { label: "Agendar cita", href: "/cliente/agendar", icon: CalendarDays },
+  { label: "Mis mascotas", href: "/cliente/mis-mascotas", icon: PawPrint },
+  { label: "Registrar mascota", href: "/cliente/mascotas", icon: PawPrint },
 ];
 
 export default function NavbarCliente() {
@@ -66,7 +67,7 @@ export default function NavbarCliente() {
 
           {/* RESERVAR HORA */}
           <Link
-            to="/cliente/citas"
+            to="/cliente/agendar"
             className="hidden md:inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 px-4 py-2 text-xs md:text-sm font-semibold text-white shadow-md hover:shadow-lg hover:opacity-95 transition"
           >
             Reservar hora

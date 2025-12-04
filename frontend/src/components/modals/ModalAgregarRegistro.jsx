@@ -1,6 +1,6 @@
 // src/components/modals/ModalAgregarRegistro.jsx
 import { useState, useEffect } from "react";
-import { crearRegistroClinico } from "../../services/api";
+import { crearRegistroClinico, getProductos } from "../../services/api";
 import {
   X,
   Calendar,
@@ -44,17 +44,35 @@ export default function ModalAgregarRegistro({
     anti_marca: "",
     anti_detalles: "",
     anti_recordar: "",
+    // productos de stock usados
+    tratamiento_producto: "",
+    tratamiento_cantidad: 1,
   });
 
+  const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // cargar motivo inicial + productos cuando se abre el modal
   useEffect(() => {
+    if (!open) return;
+
     setForm((prev) => ({
       ...prev,
       motivo_consulta: motivoInicial,
     }));
-  }, [motivoInicial]);
+
+    const loadProductos = async () => {
+      try {
+        const resp = await getProductos();
+        setProductos(resp.data || []);
+      } catch (e) {
+        console.error("Error cargando productos", e);
+      }
+    };
+
+    loadProductos();
+  }, [open, motivoInicial]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -103,13 +121,23 @@ export default function ModalAgregarRegistro({
       .filter(Boolean)
       .join(" | ");
 
-    const medicamentosFinal = [
-      form.medicamentos,
-      vacunaTexto,
-      antiTexto,
-    ]
+    const medicamentosFinal = [form.medicamentos, vacunaTexto, antiTexto]
       .filter(Boolean)
       .join("\n");
+
+    // ---- Armamos items_tratamiento para el backend (stock) ----
+    const items_tratamiento = [];
+
+    if (
+      form.tratamiento_producto &&
+      Number(form.tratamiento_cantidad) > 0
+    ) {
+      items_tratamiento.push({
+        producto: form.tratamiento_producto,
+        cantidad: Number(form.tratamiento_cantidad),
+        tipo: "tratamiento", // podrías variar esto más adelante
+      });
+    }
 
     try {
       await crearRegistroClinico({
@@ -122,6 +150,7 @@ export default function ModalAgregarRegistro({
         medicamentos: medicamentosFinal,
         evolucion: form.evolucion,
         notas: form.notas,
+        items_tratamiento, // 👈 importante para descontar stock
       });
 
       if (onSuccess) {
@@ -132,7 +161,9 @@ export default function ModalAgregarRegistro({
       onClose();
     } catch (err) {
       console.error(err);
-      setError("No se pudo guardar el registro clínico. Intenta nuevamente.");
+      setError(
+        "No se pudo guardar el registro clínico. Intenta nuevamente."
+      );
       setLoading(false);
     }
   };
@@ -158,7 +189,8 @@ export default function ModalAgregarRegistro({
                 Nueva visita / registro clínico
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Completa la información de la atención para la historia clínica.
+                Completa la información de la atención para la historia
+                clínica.
               </p>
             </div>
             <button
@@ -343,6 +375,42 @@ export default function ModalAgregarRegistro({
                 </div>
               </div>
 
+              {/* Producto de stock usado */}
+              <div className="grid md:grid-cols-3 gap-4 items-end">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Producto utilizado (stock clínica)
+                  </label>
+                  <select
+                    name="tratamiento_producto"
+                    value={form.tratamiento_producto}
+                    onChange={handleChange}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="">Selecciona un producto</option>
+                    {productos.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} ({p.codigo}) — stock: {p.stock}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Cantidad usada
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    name="tratamiento_cantidad"
+                    value={form.tratamiento_cantidad}
+                    onChange={handleChange}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
                   Medicamentos (texto libre)
@@ -516,8 +584,8 @@ export default function ModalAgregarRegistro({
             {/* Footer */}
             <div className="flex justify-between items-center pt-2 pb-4">
               <p className="text-xs text-slate-500">
-                La receta y otros documentos se pueden generar después a partir
-                de este registro clínico.
+                La receta y otros documentos se pueden generar después a
+                partir de este registro clínico.
               </p>
               <div className="flex gap-3">
                 <button

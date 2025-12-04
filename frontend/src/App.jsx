@@ -14,6 +14,7 @@ import ResetPassword from "./pages/auth/ResetPassword";
 // Cliente
 import ClienteHome from "./pages/cliente/ClienteHome";
 import Citas from "./pages/cliente/Citas";
+import MisCitas from "./pages/cliente/MisCitas";
 import MisMascotas from "./pages/cliente/MisMascotas";
 import RegistrarMascotas from "./pages/mascotas/RegistrarMascotas";
 
@@ -59,6 +60,14 @@ function App() {
       />
       <Route
         path="/cliente/citas"
+        element={
+          <ClienteRoute>
+            <MisCitas />
+          </ClienteRoute>
+        }
+      />
+      <Route
+        path="/cliente/agendar"
         element={
           <ClienteRoute>
             <Citas />
