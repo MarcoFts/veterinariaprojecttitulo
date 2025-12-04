@@ -24,7 +24,8 @@ export default function NavbarCliente() {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/40 backdrop-blur-xl border-b border-white/30 shadow-sm">
+    <header className="z-[5] bg-white/70 border-b border-white/40 shadow-sm">
+
       <nav className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
 
         {/* LOGO */}

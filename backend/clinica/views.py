@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-
+from .email_utils import enviar_notificacion_cita
 
 from rest_framework import viewsets, status, mixins, serializers as drf_serializers
 from rest_framework import serializers
@@ -39,6 +39,10 @@ from .serializers import (
 from .utils import user_display_name
 
 User = get_user_model()
+
+# ---------- DISPONIBILIDAD ----------
+def _overlap(a_start, a_end, b_start, b_end) -> bool:
+    return a_start < b_end and b_start < a_end
 
 
 # ---------- HELPERS DE ROL ----------
@@ -245,7 +249,7 @@ class CitaViewSet(viewsets.ModelViewSet):
 
         return base_qs.order_by("inicio")
 
-    # ---------- 🔥 PERFORM_CREATE ARREGLADO ----------
+    # ---------- 🔥 PERFORM_CREATE ARREGLADO + ENVÍO DE CORREO ----------
     def perform_create(self, serializer):
         data = self.request.data
 
@@ -258,23 +262,32 @@ class CitaViewSet(viewsets.ModelViewSet):
         box = data.get("box", None)
 
         if not cliente_id:
-            raise drf_serializers.ValidationError({"cliente_id": "El cliente es obligatorio."})
+            raise drf_serializers.ValidationError(
+                {"cliente_id": "El cliente es obligatorio."}
+            )
 
         if not mascota_id:
-            raise drf_serializers.ValidationError({"mascota_id": "La mascota es obligatoria."})
+            raise drf_serializers.ValidationError(
+                {"mascota_id": "La mascota es obligatoria."}
+            )
 
         if not veterinario_id:
-            raise drf_serializers.ValidationError({"veterinario_id": "El veterinario es obligatorio."})
+            raise drf_serializers.ValidationError(
+                {"veterinario_id": "El veterinario es obligatorio."}
+            )
 
         cliente = get_object_or_404(Cliente, pk=cliente_id)
         mascota = get_object_or_404(Mascota, pk=mascota_id)
         veterinario = get_object_or_404(User, pk=veterinario_id)
 
+        # Validación: un cliente solo puede agendar con sus mascotas
         if user_is_client(self.request.user):
             if mascota.cliente_id != cliente.id:
-                raise PermissionDenied("No puedes agendar con una mascota que no es tuya.")
+                raise PermissionDenied(
+                    "No puedes agendar con una mascota que no es tuya."
+                )
 
-        serializer.save(
+        cita = serializer.save(
             cliente=cliente,
             mascota=mascota,
             veterinario=veterinario,
@@ -284,6 +297,11 @@ class CitaViewSet(viewsets.ModelViewSet):
             box=box,
             estado="pendiente",
         )
+
+        # 📧 Enviar correo de creación de cita
+        enviar_notificacion_cita(cita, "creada")
+
+        return cita
 
     # ---------- ACCIONES ----------
     @action(detail=True, methods=["patch"])
@@ -296,10 +314,17 @@ class CitaViewSet(viewsets.ModelViewSet):
                 return Response({"detail": "No autorizado."}, status=403)
 
         if cita.estado == "cancelada":
-            return Response({"detail": "No se puede confirmar una cita cancelada."}, status=400)
+            return Response(
+                {"detail": "No se puede confirmar una cita cancelada."},
+                status=400,
+            )
 
         cita.estado = "confirmada"
         cita.save(update_fields=["estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "confirmada")
+
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
@@ -312,10 +337,17 @@ class CitaViewSet(viewsets.ModelViewSet):
                 return Response({"detail": "No autorizado."}, status=403)
 
         if cita.estado == "cancelada":
-            return Response({"detail": "La cita ya está cancelada."}, status=400)
+            return Response(
+                {"detail": "La cita ya está cancelada."},
+                status=400,
+            )
 
         cita.estado = "cancelada"
         cita.save(update_fields=["estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "cancelada")
+
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
@@ -327,10 +359,14 @@ class CitaViewSet(viewsets.ModelViewSet):
             return Response({"detail": "No autorizado."}, status=403)
 
         if cita.estado == "cancelada":
-            return Response({"detail": "No corresponde marcar no asistida una cita cancelada."}, status=400)
+            return Response(
+                {"detail": "No corresponde marcar no asistida una cita cancelada."},
+                status=400,
+            )
 
         cita.estado = "no_asistida"
         cita.save(update_fields=["estado"])
+
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
@@ -365,16 +401,22 @@ class CitaViewSet(viewsets.ModelViewSet):
                 nuevo_inicio, timezone.get_current_timezone()
             )
         else:
-            nuevo_inicio = nuevo_inicio.astimezone(timezone.get_current_timezone())
+            nuevo_inicio = nuevo_inicio.astimezone(
+                timezone.get_current_timezone()
+            )
 
         if duracion is None:
-            duracion_min = int((cita.fin - cita.inicio).total_seconds() // 60)
+            duracion_min = int(
+                (cita.fin - cita.inicio).total_seconds() // 60
+            )
         else:
             try:
                 duracion_min = int(duracion)
             except (TypeError, ValueError):
                 return Response(
-                    {"detail": "La duración debe ser un número entero en minutos."},
+                    {
+                        "detail": "La duración debe ser un número entero en minutos."
+                    },
                     status=400,
                 )
 
@@ -394,13 +436,14 @@ class CitaViewSet(viewsets.ModelViewSet):
             inicio__date=nuevo_inicio.date(),
         )
 
+        # Chequeo de conflictos
         def hay_conflicto():
             from django.utils import timezone as tz_mod
 
             for c in citas_conflicto:
                 ci = tz_mod.localtime(c.inicio, tz)
                 cf = tz_mod.localtime(c.fin, tz)
-                if nuevo_box and c.box and nuevo_box != c.box:
+                if nuevo_box and c.box and c.box != nuevo_box:
                     continue
                 if _overlap(nuevo_inicio, nuevo_fin, ci, cf):
                     return True
@@ -408,7 +451,7 @@ class CitaViewSet(viewsets.ModelViewSet):
             for b in bloqueos_conflicto:
                 bi = tz_mod.localtime(b.inicio, tz)
                 bf = tz_mod.localtime(b.fin, tz)
-                if nuevo_box and b.box and nuevo_box != b.box:
+                if nuevo_box and b.box and b.box != nuevo_box:
                     continue
                 if _overlap(nuevo_inicio, nuevo_fin, bi, bf):
                     return True
@@ -429,6 +472,9 @@ class CitaViewSet(viewsets.ModelViewSet):
             cita.estado = "pendiente"
 
         cita.save(update_fields=["inicio", "fin", "box", "estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "reprogramada")
 
         return Response(self.get_serializer(cita).data)
 
@@ -532,11 +578,6 @@ def veterinarios(request):
     return Response(serializer.data)
 
 
-# ---------- DISPONIBILIDAD ----------
-def _overlap(a_start, a_end, b_start, b_end) -> bool:
-    return a_start < b_end and b_start < a_end
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def disponibilidad(request):
@@ -589,7 +630,9 @@ def disponibilidad(request):
         for c in c_qs
     ]
 
-    b_qs = BloqueoAgenda.objects.filter(veterinario_id=vet_id, inicio__date=date_obj)
+    b_qs = BloqueoAgenda.objects.filter(
+        veterinario_id=vet_id, inicio__date=date_obj
+    )
     bloques_dia = [
         (
             timezone.localtime(b.inicio, tz),
@@ -638,8 +681,7 @@ def disponibilidad(request):
 # ---------- REGISTRO CLÍNICO ----------
 class RegistroClinicoViewSet(viewsets.ModelViewSet):
     queryset = (
-        RegistroClinico.objects
-        .select_related("mascota", "veterinario", "cita")
+        RegistroClinico.objects.select_related("mascota", "veterinario", "cita")
         .order_by("-fecha", "-id")
     )
     serializer_class = RegistroClinicoSerializer
@@ -671,22 +713,18 @@ MOTIVOS_CONSULTA_OPCIONES = [
     {"codigo": "control_anual", "nombre": "Control anual de rutina"},
     {"codigo": "control_postoperatorio", "nombre": "Control postoperatorio"},
     {"codigo": "control_cronico", "nombre": "Control de enfermedad crónica"},
-
     {"codigo": "vacunacion", "nombre": "Vacunación"},
     {"codigo": "desparasitacion", "nombre": "Desparasitación"},
     {"codigo": "esterilizacion_castracion", "nombre": "Esterilización / castración"},
     {"codigo": "certificado_salud", "nombre": "Certificado de salud / viaje"},
-
     {"codigo": "problema_digestivo", "nombre": "Problemas digestivos"},
     {"codigo": "problema_respiratorio", "nombre": "Problemas respiratorios"},
     {"codigo": "problema_piel", "nombre": "Problemas de piel"},
     {"codigo": "problema_oidos", "nombre": "Problemas de oídos"},
     {"codigo": "problema_ojos", "nombre": "Problemas de ojos"},
-
     {"codigo": "problema_locomotor", "nombre": "Problemas locomotores"},
     {"codigo": "problema_urinario", "nombre": "Problemas urinarios"},
     {"codigo": "problema_conducta", "nombre": "Problemas de conducta"},
-
     {"codigo": "urgencia", "nombre": "Urgencia"},
     {"codigo": "asesoria", "nombre": "Asesoría"},
     {"codigo": "otro", "nombre": "Otro motivo"},

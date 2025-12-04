@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import LayoutVet from "../../components/layout/LayoutVet";
 import ModalCrearCita from "../../components/modals/ModalCrearCita";
-import ModalReprogramarCita from "../../components/modals/ModalReprogramarCita";
+import ModalReprogramarCita from "../../components/modals/ModalReprogramarCitaVet";
 import {
   me as getUserProfile,
   getDisponibilidad,

@@ -1,5 +1,6 @@
 // src/pages/cliente/citas.jsx
 import LayoutCliente from "../../components/layout/LayoutCliente";
+import ModalReprogramarCitaCliente from "../../components/modals/ModalReprogramarCitaCliente";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
@@ -251,35 +252,35 @@ export default function Citas() {
   const handleChangeFechaHeader = async (e) => {
     const val = e.target.value;
     const hoy = dayjs().format("YYYY-MM-DD");
-  
+
     // ❌ si el usuario intenta seleccionar un día pasado
     if (dayjs(val).isBefore(hoy)) {
       alert("No puedes ver ni agendar en días pasados.");
       setFecha(hoy);
-  
+
       // Ajustar form también
       setForm((prev) => ({
         ...prev,
         fecha: hoy,
         hora: "",
       }));
-  
+
       return;
     }
-  
+
     // ✔ Si la fecha es válida
     setFecha(val);
-  
+
     const nuevoForm = { ...form, fecha: val, hora: "" };
     setForm(nuevoForm);
-  
+
     const diffDays = dayjs(val).diff(dayjs().startOf("day"), "day");
     const aligned = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
     setWeekOffset(aligned);
-  
+
     if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
   };
-  
+
   // Crear cita
   const handleSubmitCrear = async (e) => {
     e.preventDefault();
@@ -332,25 +333,38 @@ export default function Citas() {
   };
 
   // Cancelar cita
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmCitaId, setConfirmCitaId] = useState(null);
+const [confirmOpen, setConfirmOpen] = useState(false);
+const [confirmCitaId, setConfirmCitaId] = useState(null);
+const [loadingCancelar, setLoadingCancelar] = useState(false);
 
-  const handleCancelarCita = (id) => {
-    setConfirmCitaId(id);
-    setConfirmOpen(true);
-  };
+const handleCancelarCita = (id) => {
+  setConfirmCitaId(id);
+  setConfirmOpen(true);
+};
 
-  const confirmarCancelacion = async () => {
-    try {
-      await cancelarCita(confirmCitaId);
-      await cargarDatos();
-    } catch (err) {
-      alert("Error al cancelar.");
-    } finally {
-      setConfirmOpen(false);
-      setConfirmCitaId(null);
-    }
-  };
+const confirmarCancelacion = async () => {
+  if (!confirmCitaId) return;
+
+  setLoadingCancelar(true);
+
+  try {
+    // 👈 usamos el ID guardado en estado
+    await cancelarCita(confirmCitaId);
+
+    // recargar citas del día
+    await cargarDatos();
+
+    // cerrar modal
+    setConfirmOpen(false);
+    setConfirmCitaId(null);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoadingCancelar(false);
+  }
+};
+
+
 
   const calcularDuracionCita = (cita) => {
     if (cita.inicio && cita.fin) {
@@ -383,21 +397,11 @@ export default function Citas() {
     }
   };
 
-  const abrirModalReprogramar = async (cita) => {
+  const abrirModalReprogramar = (cita) => {
     setSelectedCita(cita);
-    const fechaActual = cita.inicio?.slice(0, 10) || fecha;
-    setNuevaFecha(fechaActual);
-    setSlotSeleccionado("");
-    setSlotsReprog([]);
     setShowModal(true);
-
-    // alineamos el mini calendario del modal a la fecha de la cita
-    const diffDays = dayjs(fechaActual).diff(dayjs().startOf("day"), "day");
-    const baseOffset = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
-    setReprogWeekOffset(baseOffset);
-
-    await cargarSlotsReprogramar(cita, fechaActual);
   };
+
 
   // navegación semana modal
   const handleReprogWeekNav = async (direction) => {
@@ -875,135 +879,19 @@ export default function Citas() {
           </section>
         </div>
 
-        {/* Modal reprogramar */}
-        {showModal && selectedCita && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-5">
-              <h3 className="text-base font-semibold text-slate-900 mb-3">
-                Reprogramar cita #{selectedCita.id}
-              </h3>
+        {/* Modal reprogramar (mismo diseño que panel de veterinario) */}
+        <ModalReprogramarCitaCliente
+          open={showModal}
+          cita={selectedCita}
+          onClose={() => {
+            setShowModal(false);
+            setSelectedCita(null);
+          }}
+          onConfirm={async () => {
+            await cargarDatos();
+          }}
+        />
 
-              <form onSubmit={handleSubmitReprogramar} className="space-y-4">
-                {/* Mini calendario como en el panel izquierdo */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-slate-700">
-                    Nueva fecha
-                  </label>
-
-                  <div className="flex items-center justify-between mb-1">
-                    <button
-                      type="button"
-                      onClick={() => handleReprogWeekNav("prev")}
-                      disabled={reprogWeekOffset === 0}
-                      className="p-1 rounded-full border border-slate-300 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
-                      {currentMonthLabelReprog}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleReprogWeekNav("next")}
-                      className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex gap-1 overflow-x-auto pb-1">
-                    {upcomingDaysReprog.map((d) => (
-                      <button
-                        key={d.value}
-                        type="button"
-                        onClick={() => handleSelectDiaReprog(d.value)}
-                        className={
-                          "flex flex-col items-center min-w-[3rem] px-2 py-1 rounded-lg border text-[11px] " +
-                          (nuevaFecha === d.value
-                            ? "bg-sky-600 text-white border-sky-600"
-                            : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
-                        }
-                      >
-                        <span className="uppercase tracking-wide text-[10px]">
-                          {d.dow}
-                        </span>
-                        <span className="text-sm font-semibold">{d.dia}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-700">
-                    Horarios disponibles
-                  </label>
-                  {loadingSlotsReprog ? (
-                    <p className="text-xs text-slate-500">
-                      Cargando horarios disponibles...
-                    </p>
-                  ) : slotsReprog.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      No hay horarios disponibles para esta fecha.
-                    </p>
-                  ) : (
-                    <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
-                      <p className="text-[11px] text-slate-500 mb-2">
-                        Horarios disponibles para{" "}
-                        <span className="font-semibold">
-                          {dayjs(nuevaFecha).format("ddd DD MMM YYYY")}
-                        </span>
-                      </p>
-
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                        {slotsReprog.map((h) => (
-                          <label
-                            key={h}
-                            className={
-                              "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs cursor-pointer select-none " +
-                              (slotSeleccionado === h
-                                ? "bg-sky-600 text-white border-sky-600"
-                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100")
-                            }
-                          >
-                            <input
-                              type="radio"
-                              name="hora-reprog"
-                              value={h}
-                              checked={slotSeleccionado === h}
-                              onChange={() => setSlotSeleccionado(h)}
-                              className="hidden"
-                            />
-                            {h}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setSelectedCita(null);
-                    }}
-                    className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cerrar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!slotSeleccionado || savingReprog}
-                    className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed hover:bg-sky-700"
-                  >
-                    {savingReprog ? "Guardando..." : "Confirmar cambio"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
         {/* Modal reprogramar */}
         {/* ⭐⭐⭐ MINI-MODAL PREMIUM DE CANCELACIÓN ⭐⭐⭐ */}
         {confirmOpen && (
@@ -1023,10 +911,14 @@ export default function Citas() {
                 </button>
 
                 <button
+                  disabled={loadingCancelar}
                   onClick={confirmarCancelacion}
-                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+                  className={`px-4 py-2 rounded-lg text-white transition ${loadingCancelar
+                      ? "bg-red-400 cursor-not-allowed"
+                      : "bg-red-600 hover:bg-red-700"
+                    }`}
                 >
-                  Sí, cancelar
+                  {loadingCancelar ? "Cancelando..." : "Sí, cancelar"}
                 </button>
               </div>
 
@@ -1034,6 +926,7 @@ export default function Citas() {
           </div>
         )}
         {/* ⭐⭐⭐ FIN MINI-MODAL ⭐⭐⭐ */}
+
       </div>
     </LayoutCliente>
   );
