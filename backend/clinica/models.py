@@ -146,16 +146,15 @@ class RegistroClinico(models.Model):
         null=True,
         blank=True,
         related_name="registros_clinicos",
-        help_text="Cita asociada (si aplica)",
     )
+
     fecha = models.DateTimeField(default=timezone.now)
 
-    motivo_consulta = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Motivo principal de la consulta",
-    )
-    diagnostico = models.TextField()
+    # Campos clínicos
+    motivo_consulta = models.TextField(blank=True)
+    anamnesis = models.TextField(blank=True)
+    examen_fisico = models.TextField(blank=True)
+    diagnostico = models.TextField(blank=True)
     procedimientos = models.TextField(blank=True)
     tratamientos = models.TextField(blank=True)
     medicamentos = models.TextField(blank=True)
@@ -183,9 +182,8 @@ class RegistroClinicoProducto(models.Model):
         on_delete=models.CASCADE,
         related_name="items_tratamiento",
     )
-    # Usamos string porque Producto está definido más abajo
     producto = models.ForeignKey(
-        "Producto",
+        "Producto",                      
         on_delete=models.PROTECT,
         related_name="usos_en_registros",
     )
@@ -200,15 +198,44 @@ class RegistroClinicoProducto(models.Model):
     def __str__(self):
         return f"{self.producto.nombre} x{self.cantidad} ({self.get_tipo_display()})"
 
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+
+
 class Producto(models.Model):
+    CATEGORIAS = (
+        ("tratamiento", "Tratamiento / Medicamento"),
+        ("vacuna", "Vacuna"),
+        ("antiparasitario", "Antiparasitario"),
+        ("insumo", "Insumo"),
+        ("otro", "Otro"),
+    )
+
     nombre = models.CharField(max_length=150)
-    codigo = models.CharField(max_length=50, unique=True)
+    codigo = models.CharField(  # código interno opcional
+        max_length=50, unique=True, null=True, blank=True
+    )
+    categoria = models.CharField(
+        max_length=20,
+        choices=CATEGORIAS,
+        default="tratamiento",
+    )
+
+    # 🆕 Datos sanitarios para vacunas / medicamentos
+    laboratorio = models.CharField(
+        max_length=100, blank=True, null=True, help_text="Laboratorio / marca"
+    )
+    lote = models.CharField(
+        max_length=50, blank=True, null=True, help_text="Lote del producto"
+    )
+
     stock = models.IntegerField(default=0)
     stock_minimo = models.IntegerField(default=0)
     fecha_vencimiento = models.DateField(null=True, blank=True)
 
     def en_alerta_stock(self):
-        return self.stock_minimo > 0 and self.stock <= self.stock_minimo
+      return self.stock_minimo > 0 and self.stock <= self.stock_minimo
 
     def en_alerta_vencimiento(self, dias=30):
         if not self.fecha_vencimiento:
@@ -218,8 +245,7 @@ class Producto(models.Model):
         )
 
     def __str__(self):
-        return f"{self.nombre} ({self.codigo})"
-
+        return f"{self.nombre} ({self.codigo or 'sin código'})"
 
 class MovimientoInventario(models.Model):
     TIPO = (
@@ -240,11 +266,14 @@ class MovimientoInventario(models.Model):
     def save(self, *args, **kwargs):
         creating = self.pk is None
         super().save(*args, **kwargs)
+
+        # Solo ajustar stock cuando se crea el movimiento
         if creating:
+            stock_actual = self.producto.stock or 0
             if self.tipo == "ingreso":
-                self.producto.stock = (self.producto.stock or 0) + self.cantidad
+                self.producto.stock = stock_actual + self.cantidad
             else:
-                self.producto.stock = (self.producto.stock or 0) - self.cantidad
+                self.producto.stock = stock_actual - self.cantidad
             self.producto.save(update_fields=["stock"])
 
     def __str__(self):
@@ -253,7 +282,6 @@ class MovimientoInventario(models.Model):
             f"{self.producto.codigo} {signo}{self.cantidad} "
             f"@ {self.fecha:%Y-%m-%d %H:%M}"
         )
-
 
 # ---- Agenda ----
 
@@ -309,3 +337,25 @@ class BloqueoAgenda(models.Model):
             f"Bloqueo {self.inicio:%Y-%m-%d %H:%M}-"
             f"{self.fin:%H:%M}{box} ({self.veterinario})"
         )
+
+class MotivoConsulta(models.Model):
+    nombre = models.CharField(max_length=200, unique=True)
+    codigo = models.CharField(
+        max_length=100,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text="Código interno opcional (ej: control_general)",
+    )
+    activo = models.BooleanField(default=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="motivos_creados",
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.nombre

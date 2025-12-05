@@ -12,6 +12,7 @@ from .models import (
     HorarioAtencion,
     BloqueoAgenda,
     RegistroClinico,
+    MotivoConsulta,
 )
 
 
@@ -260,12 +261,9 @@ class CitaSerializer(serializers.ModelSerializer):
     # ❌ BORRADO create() — ahora el ViewSet maneja todo
     
 class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
-    producto_nombre = serializers.CharField(
-        source="producto.nombre", read_only=True
-    )
-    producto_codigo = serializers.CharField(
-        source="producto.codigo", read_only=True
-    )
+    producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
+    producto_codigo = serializers.CharField(source="producto.codigo", read_only=True)
+    producto_categoria = serializers.CharField(source="producto.categoria", read_only=True)
 
     class Meta:
         model = RegistroClinicoProducto
@@ -274,25 +272,20 @@ class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
             "producto",
             "producto_nombre",
             "producto_codigo",
-            "cantidad",
+            "producto_categoria",
             "tipo",
+            "cantidad",
         ]
 
 class RegistroClinicoSerializer(serializers.ModelSerializer):
-    veterinario_nombre = serializers.SerializerMethodField()
-    mascota_nombre = serializers.CharField(source="mascota.nombre", read_only=True)
-    items_tratamiento = RegistroClinicoProductoSerializer(
-        many=True, required=False
-    )
+    # para lectura (GET)
+    items_tratamiento = RegistroClinicoProductoSerializer(many=True, read_only=True)
 
     class Meta:
         model = RegistroClinico
         fields = [
             "id",
             "mascota",
-            "mascota_nombre",
-            "veterinario",
-            "veterinario_nombre",
             "cita",
             "fecha",
             "motivo_consulta",
@@ -302,7 +295,8 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
             "medicamentos",
             "evolucion",
             "notas",
-            "items_tratamiento",   # 👈 NUEVO
+            "creado_en",
+            "items_tratamiento",
         ]
         read_only_fields = ["veterinario", "veterinario_nombre"]
 
@@ -310,11 +304,13 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         full = f"{obj.veterinario.first_name} {obj.veterinario.last_name}".strip()
         return full or obj.veterinario.email or obj.veterinario.username
 
+    @transaction.atomic
     def create(self, validated_data):
         """
         - El veterinario se toma del usuario logueado.
         - Si viene una cita asociada, la marca como 'completada'.
-        - Si vienen productos en items_tratamiento, los asocia y descuenta stock.
+        - Si vienen productos en items_tratamiento, se validan y se generan
+          movimientos de inventario (salida).
         """
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -328,31 +324,29 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 {"detail": "No tienes permisos para crear registros clínicos."}
             )
 
-        # Veterinario del registro = usuario logueado
+        # Asignar veterinario automáticamente
         validated_data["veterinario"] = user
 
-        # Guardamos la cita (si existe) para actualizar su estado luego
+        # Guardar referencia a cita (si viene)
         cita = validated_data.get("cita", None)
 
-        # Extra: productos usados en el tratamiento (vienen de request.data)
-        items_tratamiento_data = request.data.get("items_tratamiento", [])
-        # Si viene como JSON string, intenta parsear
-        if isinstance(items_tratamiento_data, str):
+        # Leer items_tratamiento DESDE el request (puede venir como lista o string JSON)
+        raw_items = request.data.get("items_tratamiento", [])
+        if isinstance(raw_items, str):
             import json
             try:
-                items_tratamiento_data = json.loads(items_tratamiento_data)
+                raw_items = json.loads(raw_items)
             except Exception:
-                items_tratamiento_data = []
+                raw_items = []
 
-        # Creamos el registro clínico normalmente
-        registro = super().create(validated_data)
+        # --- PREVALIDACIÓN DE STOCK ---
+        errores_stock = []
+        productos_a_usar = []
 
-        # Asociamos productos y generamos movimientos de inventario
-        for item in items_tratamiento_data or []:
+        for item in raw_items or []:
             try:
                 producto_id = int(item.get("producto"))
                 cantidad = int(item.get("cantidad", 1))
-                tipo = item.get("tipo", "tratamiento") or "tratamiento"
             except Exception:
                 continue
 
@@ -360,9 +354,36 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 continue
 
             try:
-                producto = Producto.objects.get(pk=producto_id)
+                # select_for_update para evitar condiciones de carrera
+                producto = Producto.objects.select_for_update().get(pk=producto_id)
             except Producto.DoesNotExist:
                 continue
+
+            if producto.stock is not None and producto.stock < cantidad:
+                errores_stock.append(
+                    f"Stock insuficiente para {producto.nombre}: "
+                    f"disponible {producto.stock}, solicitado {cantidad}"
+                )
+            else:
+                productos_a_usar.append(
+                    {
+                        "producto": producto,
+                        "cantidad": cantidad,
+                        "tipo": item.get("tipo", "tratamiento") or "tratamiento",
+                    }
+                )
+
+        if errores_stock:
+            raise serializers.ValidationError({"items_tratamiento": errores_stock})
+
+        # Crear el registro clínico
+        registro = super().create(validated_data)
+
+        # Crear líneas de tratamiento + movimientos de inventario
+        for item in productos_a_usar:
+            producto = item["producto"]
+            cantidad = item["cantidad"]
+            tipo = item["tipo"]
 
             RegistroClinicoProducto.objects.create(
                 registro=registro,
@@ -371,7 +392,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 tipo=tipo,
             )
 
-            # Movimiento de inventario (SALIDA)
+            # Movimiento de inventario (SALIDA) -> ajusta stock en MovimientoInventario.save()
             MovimientoInventario.objects.create(
                 producto=producto,
                 tipo="salida",
@@ -379,7 +400,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 motivo=f"Uso en registro clínico #{registro.pk}",
             )
 
-        # Si había una cita asociada, la marcamos como 'completada'
+        # Si había una cita asociada, marcarla como completada (si el modelo lo permite)
         if cita is not None:
             try:
                 from .models import Cita  # por si acaso
@@ -392,7 +413,7 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 pass
 
         return registro
-    
+
 # ---------- Inventario ----------
 
 class ProductoSerializer(serializers.ModelSerializer):
@@ -405,6 +426,9 @@ class ProductoSerializer(serializers.ModelSerializer):
             "id",
             "nombre",
             "codigo",
+            "categoria",
+            "laboratorio",     # 🆕
+            "lote",            # 🆕
             "stock",
             "stock_minimo",
             "fecha_vencimiento",
@@ -418,6 +442,15 @@ class ProductoSerializer(serializers.ModelSerializer):
     def get_alerta_vencimiento(self, obj):
         return obj.en_alerta_vencimiento()
 
+class MovimientoInventarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MovimientoInventario
+        fields = "__all__"
+
+
+class InventarioSerializer(serializers.Serializer):
+    stock_bajo = ProductoSerializer(many=True)
+    por_vencer = ProductoSerializer(many=True)
 
 class MovimientoInventarioSerializer(serializers.ModelSerializer):
     class Meta:
@@ -474,3 +507,46 @@ class BloqueoAgendaSerializer(serializers.ModelSerializer):
         model = BloqueoAgenda
         fields = "__all__"
         read_only_fields = ("veterinario",)
+
+class MotivoConsultaSerializer(serializers.ModelSerializer):
+    creado_por_nombre = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = MotivoConsulta
+        fields = [
+            "id",
+            "nombre",
+            "codigo",
+            "activo",
+            "creado_por",
+            "creado_por_nombre",
+            "creado_en",
+        ]
+        read_only_fields = [
+            "id",
+            "creado_por",
+            "creado_por_nombre",
+            "creado_en",
+        ]
+
+    def get_creado_por_nombre(self, obj):
+        if obj.creado_por:
+          # trata de usar nombre completo si tu User lo tiene
+          full_name = getattr(obj.creado_por, "get_full_name", None)
+          if callable(full_name):
+              nombre = full_name()
+              if nombre:
+                  return nombre
+          return obj.creado_por.username
+        return None
+
+    def create(self, validated_data):
+        """
+        Cuando se crea desde la API, le metemos automáticamente el usuario
+        que hizo la petición como 'creado_por'.
+        """
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            validated_data["creado_por"] = request.user
+        return super().create(validated_data)
+

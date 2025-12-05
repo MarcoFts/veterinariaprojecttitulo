@@ -16,7 +16,7 @@ from .views import (
     InventarioViewSet,
     me,
     RegistroClinicoViewSet,
-    motivos_consulta,
+    MotivoConsultaListCreateAPIView,
 )
 
 # Vistas de autenticación
@@ -61,5 +61,5 @@ urlpatterns = [
     path("api/agenda/disponibilidad/", disponibilidad, name="agenda-disponibilidad"),
     path("api/veterinarios/", veterinarios, name="veterinarios"),
      # Motivos de consulta (predefinidos)
-    path("api/motivos-consulta/", motivos_consulta, name="motivos-consulta"),
+    path("api/motivos-consulta/", MotivoConsultaListCreateAPIView.as_view(), name="motivos-consulta"),
 ]

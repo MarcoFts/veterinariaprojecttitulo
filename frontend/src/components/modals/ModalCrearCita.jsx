@@ -13,10 +13,10 @@ import { useAuth } from "../../context/AuthContext";
 
 dayjs.locale("es");
 
-const LABEL_OTRO_MOTIVO = "Otro motivo";
+const CODIGO_OTRO = "otro"; // 👈 código estándar para "Otro motivo"
 
 export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
-  const { user } = useAuth(); // 👈 veterinario logueado
+  const { user } = useAuth(); // veterinario logueado
 
   const [clientes, setClientes] = useState([]);
   const [mascotas, setMascotas] = useState([]);
@@ -30,7 +30,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
   const [form, setForm] = useState({
     cliente: "",
     mascota: "",
-    motivo: "",
+    motivoCodigo: "",
     motivoOtro: "",
     box: "",
   });
@@ -98,7 +98,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     setForm({
       cliente: "",
       mascota: "",
-      motivo: "",
+      motivoCodigo: "",
       motivoOtro: "",
       box: slot.box || "",
     });
@@ -116,15 +116,20 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
         // /clientes/ YA devuelve solo clientes
         setClientes(Array.isArray(cliRes.data) ? cliRes.data : []);
 
-
+        // Motivos desde backend (id, codigo, nombre, activo...)
         let base = motRes.data || [];
+
+        // Aseguramos que exista "otro" por código
         const tieneOtro = base.some(
-          (m) =>
-            (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
+          (m) => (m.codigo || "").toLowerCase() === CODIGO_OTRO
         );
         if (!tieneOtro) {
-          base = [...base, { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO }];
+          base = [
+            ...base,
+            { id: "otro-local", codigo: CODIGO_OTRO, nombre: "Otro motivo" },
+          ];
         }
+
         setMotivos(base);
       } catch (err) {
         console.error("Error cargando datos del modal:", err);
@@ -133,7 +138,6 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
         setLoadingDatos(false);
       }
     };
-
 
     cargarDatos();
   }, [open, slot]);
@@ -191,26 +195,33 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       return;
     }
 
-    if (!form.motivo) {
+    if (!form.motivoCodigo) {
       alert("Debes seleccionar un motivo de consulta.");
       return;
     }
 
-    if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
-      alert("Por favor escribe el motivo de la consulta.");
-      return;
-    }
+    // Motivo texto final que va al backend
+    let motivoFinal = "";
 
-    // Motivo final
-    const motivoFinal =
-      form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro.trim() : form.motivo;
+    if (form.motivoCodigo === CODIGO_OTRO) {
+      if (!form.motivoOtro.trim()) {
+        alert("Por favor escribe el motivo de la consulta.");
+        return;
+      }
+      motivoFinal = form.motivoOtro.trim();
+    } else {
+      const motivoObj = motivos.find(
+        (m) => (m.codigo || "").toLowerCase() === form.motivoCodigo.toLowerCase()
+      );
+      motivoFinal = motivoObj?.nombre || "Motivo de consulta";
+    }
 
     // Fecha/hora: "YYYY-MM-DDTHH:mm:ss"
     const fechaISO = slot.fecha;
     const inicioISO = `${fechaISO}T${slot.horaInicio}:00`;
     const finISO = `${fechaISO}T${slot.horaFin}:00`;
 
-    // 👇 Veterinario = usuario logueado
+    // Veterinario = usuario logueado
     const vetIdRaw =
       user?.veterinario_id ??
       user?.id ??
@@ -229,7 +240,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       cliente_id: Number(form.cliente),
       mascota_id: Number(form.mascota),
       veterinario_id: Number(vetIdRaw),
-      motivo: motivoFinal,
+      motivo: motivoFinal, // 👈 texto final que espera el backend
       box: form.box || slot.box || "",
       inicio: inicioISO,
       fin: finISO,
@@ -352,21 +363,21 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
                   Motivo de la cita
                 </label>
                 <select
-                  name="motivo"
-                  value={form.motivo}
+                  name="motivoCodigo"
+                  value={form.motivoCodigo}
                   onChange={handleChange}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
                   required
                 >
                   <option value="">Selecciona un motivo</option>
                   {motivos.map((m) => (
-                    <option key={m.codigo || m.nombre} value={m.nombre}>
+                    <option key={m.id || m.codigo || m.nombre} value={m.codigo}>
                       {m.nombre}
                     </option>
                   ))}
                 </select>
 
-                {form.motivo === LABEL_OTRO_MOTIVO && (
+                {form.motivoCodigo === CODIGO_OTRO && (
                   <input
                     type="text"
                     name="motivoOtro"

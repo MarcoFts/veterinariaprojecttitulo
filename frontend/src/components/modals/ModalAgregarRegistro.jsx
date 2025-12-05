@@ -39,28 +39,37 @@ export default function ModalAgregarRegistro({
     vacuna_marca: "",
     vacuna_detalles: "",
     vacuna_recordar: "",
+    vacuna_producto_id: "",
     // antiparasitarios
     anti_tipo: "",
     anti_marca: "",
     anti_detalles: "",
     anti_recordar: "",
-    // productos de stock usados
+    anti_producto_id: "",
+    // productos de stock usados (inputs del formulario)
     tratamiento_producto: "",
     tratamiento_cantidad: 1,
+    tratamiento_tipo: "tratamiento",
   });
 
   const [productos, setProductos] = useState([]);
+  const [itemsTratamiento, setItemsTratamiento] = useState([]); // lista de productos agregados
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // cargar motivo inicial + productos cuando se abre el modal
+  // Cuando se abre el modal, refrescamos motivo y limpiamos errores
   useEffect(() => {
     if (!open) return;
-
     setForm((prev) => ({
       ...prev,
-      motivo_consulta: motivoInicial,
+      motivo_consulta: motivoInicial || "",
     }));
+    setError("");
+  }, [open, motivoInicial]);
+
+  // Cargar productos del backend solo cuando el modal esté abierto
+  useEffect(() => {
+    if (!open) return;
 
     const loadProductos = async () => {
       try {
@@ -72,11 +81,135 @@ export default function ModalAgregarRegistro({
     };
 
     loadProductos();
-  }, [open, motivoInicial]);
+  }, [open]);
+
+  // Limpiar la lista de productos cuando se cierra el modal
+  useEffect(() => {
+    if (!open) {
+      setItemsTratamiento([]);
+    }
+  }, [open]);
+
+  // Listas filtradas según categoría
+  const productosVacuna = productos.filter((p) => p.categoria === "vacuna");
+  const productosAntiparasitario = productos.filter(
+    (p) => p.categoria === "antiparasitario"
+  );
+  const productosTratamiento = productos.filter(
+    (p) =>
+      p.categoria === "tratamiento" ||
+      p.categoria === "insumo" ||
+      p.categoria === "otro"
+  );
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+
+    // Si el usuario cambia el tipo de uso, vaciamos el producto principal
+    if (name === "tratamiento_tipo") {
+      setForm((prev) => ({
+        ...prev,
+        tratamiento_tipo: value,
+        tratamiento_producto: "", // obligamos a elegir un producto compatible
+      }));
+      return;
+    }
+
+    // Si cambia el select de vacuna (desde inventario por lote)
+    if (name === "vacuna_producto_id") {
+      const prod = productosVacuna.find(
+        (p) => String(p.id) === String(value)
+      );
+
+      if (!prod) {
+        setForm((prev) => ({
+          ...prev,
+          vacuna_producto_id: "",
+          vacuna_tipo: "",
+          vacuna_marca: "",
+        }));
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        vacuna_producto_id: value,
+        vacuna_tipo: prod.nombre,
+        vacuna_marca: [
+          prod.laboratorio || "",
+          prod.lote ? `Lote ${prod.lote}` : "",
+        ]
+          .filter(Boolean)
+          .join(" - "),
+      }));
+      return;
+    }
+
+    // Si cambia el select de antiparasitario (desde inventario por lote)
+    if (name === "anti_producto_id") {
+      const prod = productosAntiparasitario.find(
+        (p) => String(p.id) === String(value)
+      );
+
+      if (!prod) {
+        setForm((prev) => ({
+          ...prev,
+          anti_producto_id: "",
+          anti_tipo: "",
+          anti_marca: "",
+        }));
+        return;
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        anti_producto_id: value,
+        anti_tipo: prod.nombre,
+        anti_marca: [
+          prod.laboratorio || "",
+          prod.lote ? `Lote ${prod.lote}` : "",
+        ]
+          .filter(Boolean)
+          .join(" - "),
+      }));
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddProducto = () => {
+    if (!form.tratamiento_producto || Number(form.tratamiento_cantidad) <= 0) {
+      return;
+    }
+
+    const productoObj = productos.find(
+      (p) => String(p.id) === String(form.tratamiento_producto)
+    );
+    if (!productoObj) return;
+
+    setItemsTratamiento((prev) => [
+      ...prev,
+      {
+        producto: form.tratamiento_producto,
+        producto_nombre: productoObj.nombre,
+        producto_codigo: productoObj.codigo,
+        cantidad: Number(form.tratamiento_cantidad),
+        tipo: form.tratamiento_tipo || "tratamiento",
+      },
+    ]);
+
+    // limpiar inputs de producto
+    setForm((prev) => ({
+      ...prev,
+      tratamiento_producto: "",
+      tratamiento_cantidad: 1,
+      // mantenemos tratamiento_tipo
+    }));
+  };
+
+  const handleRemoveItem = (index) => {
+    setItemsTratamiento((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -126,17 +259,42 @@ export default function ModalAgregarRegistro({
       .join("\n");
 
     // ---- Armamos items_tratamiento para el backend (stock) ----
-    const items_tratamiento = [];
+    const items_tratamiento = itemsTratamiento.map((item) => ({
+      producto: item.producto,
+      cantidad: item.cantidad,
+      tipo: item.tipo,
+    }));
 
-    if (
-      form.tratamiento_producto &&
-      Number(form.tratamiento_cantidad) > 0
-    ) {
-      items_tratamiento.push({
-        producto: form.tratamiento_producto,
-        cantidad: Number(form.tratamiento_cantidad),
-        tipo: "tratamiento", // podrías variar esto más adelante
-      });
+    // Agregar automáticamente 1 dosis de la vacuna seleccionada (si hay)
+    if (form.vacuna_producto_id) {
+      const yaExiste = items_tratamiento.find(
+        (it) =>
+          String(it.producto) === String(form.vacuna_producto_id) &&
+          it.tipo === "vacuna"
+      );
+      if (!yaExiste) {
+        items_tratamiento.push({
+          producto: form.vacuna_producto_id,
+          cantidad: 1,
+          tipo: "vacuna",
+        });
+      }
+    }
+
+    // Agregar automáticamente 1 dosis del antiparasitario seleccionado (si hay)
+    if (form.anti_producto_id) {
+      const yaExiste = items_tratamiento.find(
+        (it) =>
+          String(it.producto) === String(form.anti_producto_id) &&
+          it.tipo === "antiparasitario"
+      );
+      if (!yaExiste) {
+        items_tratamiento.push({
+          producto: form.anti_producto_id,
+          cantidad: 1,
+          tipo: "antiparasitario",
+        });
+      }
     }
 
     try {
@@ -150,20 +308,33 @@ export default function ModalAgregarRegistro({
         medicamentos: medicamentosFinal,
         evolucion: form.evolucion,
         notas: form.notas,
-        items_tratamiento, // 👈 importante para descontar stock
+        items_tratamiento, // importante para descontar stock
       });
 
       if (onSuccess) {
         await onSuccess();
       }
-
+      setItemsTratamiento([]);
       setLoading(false);
       onClose();
     } catch (err) {
       console.error(err);
-      setError(
-        "No se pudo guardar el registro clínico. Intenta nuevamente."
-      );
+
+      const backendErrors =
+        err?.response?.data?.items_tratamiento ||
+        err?.response?.data?.detail ||
+        null;
+
+      if (Array.isArray(backendErrors)) {
+        setError(backendErrors.join(" | "));
+      } else if (typeof backendErrors === "string") {
+        setError(backendErrors);
+      } else {
+        setError(
+          "No se pudo guardar el registro clínico. Intenta nuevamente."
+        );
+      }
+
       setLoading(false);
     }
   };
@@ -178,6 +349,18 @@ export default function ModalAgregarRegistro({
     minute: "2-digit",
   });
 
+  // Según el tipo de uso, qué lista se usa en el select principal
+  let productosParaSelect = [];
+  if (form.tratamiento_tipo === "vacuna") {
+    productosParaSelect = productosVacuna;
+  } else if (form.tratamiento_tipo === "antiparasitario") {
+    productosParaSelect = productosAntiparasitario;
+  } else if (form.tratamiento_tipo === "tratamiento") {
+    productosParaSelect = productosTratamiento;
+  } else {
+    productosParaSelect = productos;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto">
       <div className="fixed inset-0 flex items-start justify-center overflow-y-auto">
@@ -189,8 +372,7 @@ export default function ModalAgregarRegistro({
                 Nueva visita / registro clínico
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Completa la información de la atención para la historia
-                clínica.
+                Completa la información de la atención para la historia clínica.
               </p>
             </div>
             <button
@@ -376,7 +558,7 @@ export default function ModalAgregarRegistro({
               </div>
 
               {/* Producto de stock usado */}
-              <div className="grid md:grid-cols-3 gap-4 items-end">
+              <div className="grid md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
                     Producto utilizado (stock clínica)
@@ -388,12 +570,16 @@ export default function ModalAgregarRegistro({
                     className="w-full border rounded-lg px-3 py-2 text-sm"
                   >
                     <option value="">Selecciona un producto</option>
-                    {productos.map((p) => (
+                    {productosParaSelect.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.nombre} ({p.codigo}) — stock: {p.stock}
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    El listado cambia según el tipo de uso seleccionado
+                    (tratamiento, vacuna, antiparasitario).
+                  </p>
                 </div>
 
                 <div>
@@ -402,14 +588,83 @@ export default function ModalAgregarRegistro({
                   </label>
                   <input
                     type="number"
-                    min={1}
                     name="tratamiento_cantidad"
                     value={form.tratamiento_cantidad}
                     onChange={handleChange}
                     className="w-full border rounded-lg px-3 py-2 text-sm"
+                    min={1}
                   />
                 </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Tipo de uso
+                  </label>
+                  <select
+                    name="tratamiento_tipo"
+                    value={form.tratamiento_tipo}
+                    onChange={handleChange}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="tratamiento">Tratamiento</option>
+                    <option value="vacuna">Vacuna</option>
+                    <option value="antiparasitario">Antiparasitario</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
               </div>
+
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={handleAddProducto}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                >
+                  Agregar a la lista
+                </button>
+              </div>
+
+              {itemsTratamiento.length > 0 && (
+                <div className="mt-3 border border-dashed border-slate-200 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-slate-600 mb-2">
+                    Productos agregados a este registro clínico
+                  </p>
+                  <div className="max-h-40 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-slate-500">
+                          <th className="py-1">Producto</th>
+                          <th className="py-1">Tipo</th>
+                          <th className="py-1 text-center">Cantidad</th>
+                          <th className="py-1 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemsTratamiento.map((item, idx) => (
+                          <tr key={idx} className="border-t border-slate-100">
+                            <td className="py-1">
+                              {item.producto_nombre} ({item.producto_codigo})
+                            </td>
+                            <td className="py-1 capitalize">{item.tipo}</td>
+                            <td className="py-1 text-center">
+                              {item.cantidad}
+                            </td>
+                            <td className="py-1 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(idx)}
+                                className="text-xs text-red-600 hover:underline"
+                              >
+                                Quitar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -440,19 +695,38 @@ export default function ModalAgregarRegistro({
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
                     Tipo de vacuna
                   </label>
-                  <input
-                    type="text"
-                    name="vacuna_tipo"
-                    value={form.vacuna_tipo}
-                    onChange={handleChange}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                    placeholder="Ej: Antirrábica, Polivalente..."
-                  />
+
+                  {productosVacuna.length > 0 ? (
+                    <select
+                      name="vacuna_producto_id"
+                      value={form.vacuna_producto_id}
+                      onChange={handleChange}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">
+                        Selecciona una vacuna del inventario
+                      </option>
+                      {productosVacuna.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} {p.lote ? `(Lote ${p.lote})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name="vacuna_tipo"
+                      value={form.vacuna_tipo}
+                      onChange={handleChange}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Ej: Antirrábica, Polivalente..."
+                    />
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Marca y N° de serie
+                    Marca y N° de serie / lote
                   </label>
                   <input
                     type="text"
@@ -460,6 +734,7 @@ export default function ModalAgregarRegistro({
                     value={form.vacuna_marca}
                     onChange={handleChange}
                     className="w-full border rounded-lg px-3 py-2 text-sm"
+                    placeholder="Se autocompleta desde el inventario, pero puedes editarlo."
                   />
                 </div>
               </div>
@@ -510,14 +785,33 @@ export default function ModalAgregarRegistro({
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
                     Tipo de antiparasitario
                   </label>
-                  <input
-                    type="text"
-                    name="anti_tipo"
-                    value={form.anti_tipo}
-                    onChange={handleChange}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                    placeholder="Comprimidos, pipeta, inyectable..."
-                  />
+
+                  {productosAntiparasitario.length > 0 ? (
+                    <select
+                      name="anti_producto_id"
+                      value={form.anti_producto_id}
+                      onChange={handleChange}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">
+                        Selecciona un antiparasitario del inventario
+                      </option>
+                      {productosAntiparasitario.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre} {p.codigo ? `(${p.codigo})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name="anti_tipo"
+                      value={form.anti_tipo}
+                      onChange={handleChange}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Comprimidos, pipeta, inyectable..."
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -584,8 +878,8 @@ export default function ModalAgregarRegistro({
             {/* Footer */}
             <div className="flex justify-between items-center pt-2 pb-4">
               <p className="text-xs text-slate-500">
-                La receta y otros documentos se pueden generar después a
-                partir de este registro clínico.
+                La receta y otros documentos se pueden generar después a partir
+                de este registro clínico.
               </p>
               <div className="flex gap-3">
                 <button

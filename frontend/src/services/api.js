@@ -163,8 +163,6 @@ export function getMascota(id) {
   return api.get(`/mascotas/${id}/`);
 }
 
-export const getMotivosConsulta = () => api.get("/motivos-consulta/");
-
 // ---------- HORARIOS DE ATENCIÓN ----------
 
 // Obtener horarios (por defecto el backend ya filtra por vet autenticado)
@@ -208,5 +206,13 @@ export function agregarStockProducto({ producto_id, cantidad, motivo }) {
     motivo,
   });
 }
+
+export const getMotivosConsulta = () =>
+  api.get("/api/motivos-consulta/");
+
+export const crearMotivoConsulta = (payload) =>
+  api.post("/api/motivos-consulta/", payload);
+// payload: { codigo: "problema_ortopedico", nombre: "Problemas ortopédicos" }
+
 
 export default api;

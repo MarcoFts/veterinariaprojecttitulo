@@ -8,7 +8,7 @@ from .email_utils import enviar_notificacion_cita
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from rest_framework import viewsets, status, mixins, serializers as drf_serializers
-from rest_framework import serializers, permissions
+from rest_framework import serializers, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -24,6 +24,8 @@ from .models import (
     HorarioAtencion,
     BloqueoAgenda,
     RegistroClinico,
+    RegistroClinicoProducto,
+    MotivoConsulta,
 )
 from .serializers import (
     ClienteSerializer,
@@ -36,6 +38,7 @@ from .serializers import (
     HorarioAtencionSerializer,
     BloqueoAgendaSerializer,
     RegistroClinicoSerializer,
+    MotivoConsultaSerializer,
 )
 from .utils import user_display_name
 
@@ -514,7 +517,6 @@ class ProductoViewSet(viewsets.ModelViewSet):
     serializer_class = ProductoSerializer
     permission_classes = [IsAuthenticated]
 
-
 # ---------- INVENTARIO ----------
 class InventarioViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     serializer_class = InventarioSerializer
@@ -530,7 +532,6 @@ class InventarioViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
             "por_vencer": ProductoSerializer(por_vencer, many=True).data,
         }
         return Response(data)
-
 
 # ---------- REGISTRO ----------
 class RegisterView(APIView):
@@ -736,31 +737,87 @@ def disponibilidad(request):
 
 # ---------- REGISTRO CLÍNICO ----------
 class RegistroClinicoViewSet(viewsets.ModelViewSet):
-    queryset = (
-        RegistroClinico.objects.select_related("mascota", "veterinario", "cita")
-        .order_by("-fecha", "-id")
-    )
+    queryset = RegistroClinico.objects.all().order_by("-fecha")
     serializer_class = RegistroClinicoSerializer
-    permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        user = self.request.user
-        qs = self.queryset
+    def create(self, request, *args, **kwargs):
+        """
+        Crea un registro clínico y, si vienen items_tratamiento,
+        crea RegistroClinicoProducto y descuenta stock.
+        """
+        data = request.data.copy()
+        items_data = data.pop("items_tratamiento", [])
 
-        mascota_id = self.request.query_params.get("mascota")
-        cita_id = self.request.query_params.get("cita")
-        if mascota_id:
-            qs = qs.filter(mascota_id=mascota_id)
-        if cita_id:
-            qs = qs.filter(cita_id=cita_id)
+        # A veces DRF entrega esto como string si viene raro; nos aseguramos:
+        if isinstance(items_data, str):
+            import json
+            try:
+                items_data = json.loads(items_data)
+            except Exception:
+                items_data = []
 
-        if user.is_staff or user_is_vet(user) or user.is_superuser:
-            return qs
+        # Creamos el registro clínico normal
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        registro = serializer.save()
 
-        if hasattr(user, "cliente"):
-            return qs.filter(mascota__cliente=user.cliente)
+        errores_items = []
 
-        return qs.none()
+        # Procesar items de tratamiento (productos usados)
+        for idx, item in enumerate(items_data):
+            try:
+                producto_id = item.get("producto")
+                tipo = item.get("tipo", "tratamiento")
+                cantidad = int(item.get("cantidad", 0))
+
+                if not producto_id or cantidad <= 0:
+                    continue
+
+                try:
+                    producto = Producto.objects.get(pk=producto_id)
+                except Producto.DoesNotExist:
+                    errores_items.append(
+                        f"Ítem {idx+1}: producto {producto_id} no existe."
+                    )
+                    continue
+
+                # Validar stock
+                if producto.stock < cantidad:
+                    errores_items.append(
+                        f"Stock insuficiente para {producto.nombre} (disponible: {producto.stock}, solicitado: {cantidad})."
+                    )
+                    continue
+
+                # Crear RegistroClinicoProducto
+                RegistroClinicoProducto.objects.create(
+                    registro=registro,
+                    producto=producto,
+                    cantidad=cantidad,
+                    tipo=tipo,
+                )
+
+                # Descontar stock
+                producto.stock -= cantidad
+                producto.save()
+
+            except Exception as e:
+                errores_items.append(f"Error en ítem {idx+1}: {str(e)}")
+
+        headers = self.get_success_headers(serializer.data)
+        respuesta = self.get_serializer(registro).data
+
+        if errores_items:
+            # Devolvemos el registro creado, pero avisando errores de algunos ítems
+            return Response(
+                {
+                    "registro": respuesta,
+                    "errores_items_tratamiento": errores_items,
+                },
+                status=status.HTTP_201_CREATED,
+                headers=headers,
+            )
+
+        return Response(respuesta, status=status.HTTP_201_CREATED, headers=headers)
 
 # ---------- MOTIVOS DE CONSULTA ----------
 MOTIVOS_CONSULTA_OPCIONES = [
@@ -784,9 +841,30 @@ MOTIVOS_CONSULTA_OPCIONES = [
     {"codigo": "asesoria", "nombre": "Asesoría"},
     {"codigo": "otro", "nombre": "Otro motivo"},
 ]
+class MotivoConsultaListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = MotivoConsultaSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        qs = MotivoConsulta.objects.filter(activo=True).order_by("nombre")
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def motivos_consulta(request):
-    return Response(MOTIVOS_CONSULTA_OPCIONES)
+        # Si aún no hay nada en BD, sembramos con la constante
+        if not qs.exists():
+            for item in MOTIVOS_CONSULTA_OPCIONES:
+                MotivoConsulta.objects.get_or_create(
+                    codigo=item["codigo"],
+                    defaults={"nombre": item["nombre"], "activo": True},
+                )
+            qs = MotivoConsulta.objects.filter(activo=True).order_by("nombre")
+
+        return qs
+
+    def perform_create(self, serializer):
+        u = self.request.user
+        # Solo veterinarios / staff / superuser pueden crear motivos
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            raise PermissionDenied(
+                "Solo el equipo veterinario puede crear nuevos motivos de consulta."
+            )
+
+        serializer.save(creado_por=u)
