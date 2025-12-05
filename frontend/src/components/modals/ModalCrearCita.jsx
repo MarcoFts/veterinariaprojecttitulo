@@ -113,7 +113,9 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
           getMotivosConsulta(),
         ]);
 
-        setClientes(cliRes.data || []);
+        // /clientes/ YA devuelve solo clientes
+        setClientes(Array.isArray(cliRes.data) ? cliRes.data : []);
+
 
         let base = motRes.data || [];
         const tieneOtro = base.some(
@@ -131,6 +133,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
         setLoadingDatos(false);
       }
     };
+
 
     cargarDatos();
   }, [open, slot]);

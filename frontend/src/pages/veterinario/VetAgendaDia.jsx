@@ -103,11 +103,11 @@ export default function VetAgendaDia() {
         prev.map((s) =>
           s.id === citaAConfirmar.id
             ? {
-                ...s,
-                estadoCita: "confirmada",
-                estado: "ocupada",
-                box: boxConfirm || null,
-              }
+              ...s,
+              estadoCita: "confirmada",
+              estado: "ocupada",
+              box: boxConfirm || null,
+            }
             : s
         )
       );
@@ -139,15 +139,19 @@ export default function VetAgendaDia() {
     const fetchClientes = async () => {
       try {
         const res = await getClientes();
-        const lista = Array.isArray(res.data)
-          ? res.data
-          : res.data?.results || [];
+        const bruta = Array.isArray(res.data) ? res.data : res.data?.results || [];
+
+        const soloClientes = bruta.filter(
+          (u) => String(u.rol).toLowerCase() === "cliente"
+        );
+
         const map = {};
-        lista.forEach((c) => {
+        soloClientes.forEach((c) => {
           map[c.id] =
             c.nombre_completo || c.nombre || c.email || `Cliente #${c.id}`;
         });
         setClientesMap(map);
+
       } catch (err) {
         console.error("Error cargando clientes:", err);
       }
@@ -190,8 +194,8 @@ export default function VetAgendaDia() {
           const rawCitas = Array.isArray(citasRes.data)
             ? citasRes.data
             : Array.isArray(citasRes.data?.results)
-            ? citasRes.data.results
-            : [];
+              ? citasRes.data.results
+              : [];
 
           const citas = rawCitas.map((c) => {
             const d = new Date(c.inicio);
@@ -331,14 +335,14 @@ export default function VetAgendaDia() {
       prev.map((s) =>
         s.id === payload.slot_id
           ? {
-              ...s,
-              estado: "ocupada",
-              estadoCita: "pendiente",
-              paciente: payload.cliente_nombre || s.paciente,
-              mascota: payload.mascota_nombre || s.mascota,
-              motivo: payload.motivo || s.motivo,
-              box: payload.box || s.box,
-            }
+            ...s,
+            estado: "ocupada",
+            estadoCita: "pendiente",
+            paciente: payload.cliente_nombre || s.paciente,
+            mascota: payload.mascota_nombre || s.mascota,
+            motivo: payload.motivo || s.motivo,
+            box: payload.box || s.box,
+          }
           : s
       )
     );
@@ -629,50 +633,50 @@ export default function VetAgendaDia() {
                                       {slot.motivo ||
                                         "Sin motivo registrado"}
                                     </p>
-                                   <div className="flex flex-wrap justify-start gap-1 mt-2">
-                                        {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
-                                        {slot.estado !== "cancelada" &&
-                                          slot.estadoCita !== "confirmada" && (
-                                            <button
-                                              type="button"
-                                              className="min-w-[90px] text-left rounded-md bg-emerald-500 px-2 py-[4px] text-[10px] font-semibold text-white hover:bg-emerald-600 whitespace-nowrap"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                abrirConfirmar(slot);
-                                              }}
-                                            >
-                                              Confirmar
-                                            </button>
-                                          )}
+                                    <div className="flex flex-wrap justify-start gap-1 mt-2">
+                                      {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
+                                      {slot.estado !== "cancelada" &&
+                                        slot.estadoCita !== "confirmada" && (
+                                          <button
+                                            type="button"
+                                            className="min-w-[90px] text-left rounded-md bg-emerald-500 px-2 py-[4px] text-[10px] font-semibold text-white hover:bg-emerald-600 whitespace-nowrap"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              abrirConfirmar(slot);
+                                            }}
+                                          >
+                                            Confirmar
+                                          </button>
+                                        )}
 
-                                        {/* Reprogramar */}
-                                        <button
-                                          type="button"
-                                          className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50 whitespace-nowrap"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (!slot.citaId) return;
-                                            setCitaParaReprogramar({
-                                              id: slot.citaId,
-                                              inicio: `${slot.fecha}T${slot.horaInicio}`,
-                                              box: slot.box || "",
-                                            });
-                                          }}
-                                        >
-                                          Reprogramar
-                                        </button>
+                                      {/* Reprogramar */}
+                                      <button
+                                        type="button"
+                                        className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50 whitespace-nowrap"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!slot.citaId) return;
+                                          setCitaParaReprogramar({
+                                            id: slot.citaId,
+                                            inicio: `${slot.fecha}T${slot.horaInicio}`,
+                                            box: slot.box || "",
+                                          });
+                                        }}
+                                      >
+                                        Reprogramar
+                                      </button>
 
-                                        {/* Cancelar */}
-                                        <button
-                                          type="button"
-                                          className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50 whitespace-nowrap"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleCancelarSlot(slot.id);
-                                          }}
-                                        >
-                                          Cancelar
-                                        </button>
+                                      {/* Cancelar */}
+                                      <button
+                                        type="button"
+                                        className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50 whitespace-nowrap"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCancelarSlot(slot.id);
+                                        }}
+                                      >
+                                        Cancelar
+                                      </button>
 
                                     </div>
                                   </div>
@@ -711,11 +715,11 @@ export default function VetAgendaDia() {
             prev.map((s) =>
               s.citaId === id
                 ? {
-                    ...s,
-                    fecha: nueva_fecha || s.fecha,
-                    horaInicio: nueva_hora,
-                    horaFin: sumarMinutos(nueva_hora, 30),
-                  }
+                  ...s,
+                  fecha: nueva_fecha || s.fecha,
+                  horaInicio: nueva_hora,
+                  horaFin: sumarMinutos(nueva_hora, 30),
+                }
                 : s
             )
           );

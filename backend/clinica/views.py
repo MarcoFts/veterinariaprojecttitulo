@@ -71,10 +71,13 @@ class ClienteViewSet(viewsets.ModelViewSet):
         qs = Cliente.objects.all().order_by("-id")
         u = self.request.user
 
+        # Veterinarios, staff y superuser ven SOLO clientes reales
         if user_is_vet(u) or u.is_staff or u.is_superuser:
-            return qs
+            return qs.filter(user__cliente__isnull=False)
 
+        # Clientes normales ven solo su propia ficha
         return qs.filter(user=u)
+
 
 
 # ---------- MASCOTAS ----------

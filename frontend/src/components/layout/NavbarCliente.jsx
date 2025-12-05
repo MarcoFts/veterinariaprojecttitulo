@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Home, CalendarDays, PawPrint, UserCircle2 } from "lucide-react";
 import { logout } from "../../auth";
 
@@ -16,6 +16,19 @@ export default function NavbarCliente() {
   const navigate = useNavigate();
   const [openUserMenu, setOpenUserMenu] = useState(false);
 
+  const menuRef = useRef(null);
+
+  // Cerrar al hacer clic fuera
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const isActive = (href) => location.pathname === href;
 
   const handleLogout = () => {
@@ -27,7 +40,7 @@ export default function NavbarCliente() {
   return (
     <header className="z-[5] bg-white/70 border-b border-white/40 shadow-sm">
 
-      <nav className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
+      <nav className="w-full px-4 py-3 flex items-center justify-between gap-4">
 
         {/* LOGO */}
         <Link to="/cliente/home" className="flex items-center gap-2">
@@ -41,7 +54,7 @@ export default function NavbarCliente() {
         </Link>
 
         {/* NAV DESKTOP */}
-        <ul className="hidden md:flex items-center gap-3 text-sm font-medium">
+        <ul className="hidden md:flex items-center gap-3 text-sm font-medium ml-4">
           {navLinks.map((item) => {
             const Icon = item.icon;
             return (
@@ -74,7 +87,7 @@ export default function NavbarCliente() {
           </Link>
 
           {/* USER + DROPDOWN */}
-          <div className="relative inline-block">
+          <div className="relative inline-block" ref={menuRef}>
             <button
               type="button"
               onClick={() => setOpenUserMenu((prev) => !prev)}
@@ -91,6 +104,7 @@ export default function NavbarCliente() {
             {openUserMenu && (
               <div className="absolute right-0 mt-2 w-full rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
                 <div className="py-1">
+
                   {/* PERFIL */}
                   <button
                     className="w-full flex items-center justify-between px-4 py-2 text-slate-700 text-sm hover:bg-slate-50 transition"
@@ -108,6 +122,7 @@ export default function NavbarCliente() {
                   >
                     Cerrar sesión
                   </button>
+
                 </div>
               </div>
             )}

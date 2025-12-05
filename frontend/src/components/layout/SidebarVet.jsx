@@ -1,3 +1,4 @@
+// frontend/src/components/layout/SidebarVet.jsx
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
@@ -9,6 +10,7 @@ import {
   Stethoscope,
   LogOut,
   Users2,
+  Boxes, // ícono para inventario
 } from "lucide-react";
 import { logout } from "../../auth";
 
@@ -37,6 +39,12 @@ const sections = [
     label: "Citas",
     description: "Historial de reservas",
     icon: ClipboardList,
+  },
+  {
+    id: "inventario",
+    label: "Inventario",
+    description: "Productos y stock",
+    icon: Boxes,
   },
   {
     id: "config",

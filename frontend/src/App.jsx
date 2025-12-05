@@ -26,6 +26,8 @@ import VetPacientes from "./pages/veterinario/VetPacientes";
 import VetFichaClinica from "./pages/veterinario/VetFichaClinica";
 import VetAgendaDia from "./pages/veterinario/VetAgendaDia";
 import VetHorarios from "./pages/veterinario/VetHorarios";
+import VetInventario from "./pages/veterinario/VetInventario";
+
 
 function App() {
   return (
@@ -101,6 +103,7 @@ function App() {
           </VetRoute>
         }
       />
+
       <Route
         path="/veterinario/agenda"
         element={
@@ -109,6 +112,7 @@ function App() {
           </VetRoute>
         }
       />
+
       <Route
         path="/veterinario/agenda-dia"
         element={
@@ -117,6 +121,16 @@ function App() {
           </VetRoute>
         }
       />
+
+      <Route
+        path="/veterinario/inventario"
+        element={
+          <VetRoute>
+            <VetInventario />
+          </VetRoute>
+        }
+      />
+
       <Route
         path="/veterinario/citas"
         element={
@@ -125,6 +139,7 @@ function App() {
           </VetRoute>
         }
       />
+
       <Route
         path="/vet/horarios"
         element={
@@ -133,6 +148,7 @@ function App() {
           </VetRoute>
         }
       />
+
       <Route
         path="/veterinario/pacientes"
         element={
@@ -141,6 +157,7 @@ function App() {
           </VetRoute>
         }
       />
+
       <Route
         path="/veterinario/paciente/:id"
         element={
