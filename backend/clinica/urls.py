@@ -2,6 +2,8 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from clinica.auth_views import EmailTokenObtainPairView
+from .views import UpdateVetProfileView
+
 
 # Vistas existentes
 from .views import (
@@ -52,6 +54,8 @@ urlpatterns = [
     path("api/auth/login/", EmailTokenObtainPairView.as_view(), name="login_email"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="me"),
+    path("api/auth/me/update/", UpdateVetProfileView.as_view(), name="update_vet_profile"),
+
 
     # Recuperación de contraseña
     path("api/auth/password-reset/", PasswordResetRequestView.as_view(), name="password_reset"),

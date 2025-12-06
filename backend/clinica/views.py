@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_simplejwt.tokens import RefreshToken
 
+
 from .models import (
     Cliente,
     Mascota,
@@ -26,6 +27,7 @@ from .models import (
     RegistroClinico,
     RegistroClinicoProducto,
     MotivoConsulta,
+    Veterinario,
 )
 from .serializers import (
     ClienteSerializer,
@@ -34,6 +36,7 @@ from .serializers import (
     ProductoSerializer,
     InventarioSerializer,
     VeterinarioSerializer,
+    VeterinarioModelSerializer,
     RegisterSerializer,
     HorarioAtencionSerializer,
     BloqueoAgendaSerializer,
@@ -612,16 +615,24 @@ class RegisterView(APIView):
 def me(request):
     u = request.user
     cliente = getattr(u, "cliente", None)
-    return Response(
-        {
-            "id": u.id,
-            "email": u.email,
-            "name": user_display_name(u),
-            "is_vet": user_is_vet(u),
-            "is_staff": u.is_staff,
-            "cliente_id": cliente.id if cliente else None,
-        }
-    )
+    vet = getattr(u, "veterinario", None)
+
+    vet_data = None
+    if vet:
+        vet_data = VeterinarioModelSerializer(vet).data
+
+    return Response({
+        "id": u.id,
+        "email": u.email,
+        "name": user_display_name(u),
+        "first_name": u.first_name,
+        "last_name": u.last_name,
+        "is_vet": user_is_vet(u),
+        "is_staff": u.is_staff,
+        "cliente_id": cliente.id if cliente else None,
+        "vet_profile": vet_data,
+    })
+
 
 
 # ---------- VETERINARIOS ----------
@@ -733,7 +744,6 @@ def disponibilidad(request):
             t += step
 
     return Response({"slots": slots})
-
 
 # ---------- REGISTRO CLÍNICO ----------
 class RegistroClinicoViewSet(viewsets.ModelViewSet):
@@ -868,3 +878,81 @@ class MotivoConsultaListCreateAPIView(generics.ListCreateAPIView):
             )
 
         serializer.save(creado_por=u)
+        
+class UpdateVetProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        user = request.user
+
+        # --- Datos personales ---
+        first_name = request.data.get("first_name", "").strip()
+        last_name = request.data.get("last_name", "").strip()
+        email = request.data.get("email", "").strip()
+
+        # validación básica
+        if not first_name or not last_name or not email:
+            return Response({"error": "Todos los campos personales son obligatorios."}, status=400)
+
+        # validar email duplicado
+        if User.objects.filter(email=email).exclude(id=user.id).exists():
+            return Response({"error": "El correo ya está registrado por otro usuario."}, status=400)
+
+        # guardar datos personales
+        user.first_name = first_name
+        user.last_name = last_name
+        user.email = email
+        user.username = email
+        user.save()
+
+        # --- Datos profesionales ---
+        telefono = request.data.get("telefono", "").strip()
+        rut_dni = request.data.get("rut_dni", "").strip()
+        especialidad = request.data.get("especialidad", "").strip()
+
+        if not telefono or not rut_dni or not especialidad:
+            return Response({"error": "Teléfono, RUT y especialidad son obligatorios."}, status=400)
+
+        direccion = request.data.get("direccion", "")
+        n_registro = request.data.get("n_registro", "")
+        # --- Años de experiencia (evitar None que genera error 500) ---
+        raw_exp = (request.data.get("anios_experiencia") or "").strip()
+
+        if raw_exp == "":
+            anios_exp = 0
+        else:
+            try:
+                anios_exp = int(raw_exp)
+            except ValueError:
+                return Response(
+                    {"error": "Años de experiencia debe ser un número entero."},
+                    status=400
+                )
+
+        bio = request.data.get("bio", "")
+
+        # CAMPOS ADICIONALES QUE EL FRONT ENVÍA
+        duracion = request.data.get("duracion_consulta_min", 30)
+        vacunas = request.data.get("trabaja_con_vacunas", True)
+        cirugias = request.data.get("trabaja_con_cirugias", False)
+
+        # asegurar que el perfil exista
+        vet, created = Veterinario.objects.get_or_create(user=user)
+
+        vet.telefono = telefono
+        vet.rut_dni = rut_dni
+        vet.especialidad = especialidad
+        vet.direccion = direccion
+        vet.n_registro = n_registro
+        vet.anios_experiencia = anios_exp
+        vet.bio = bio
+        vet.duracion_consulta_min = duracion
+        vet.trabaja_con_vacunas = vacunas
+        vet.trabaja_con_cirugias = cirugias
+
+        vet.save()
+
+        return Response({"detail": "Perfil actualizado correctamente."}, status=200)
+
+
+

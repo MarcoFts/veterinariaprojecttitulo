@@ -92,6 +92,12 @@ export function me() {
 }
 export const getUserProfile = me;
 
+export function updateVetProfile(payload) {
+  return api.put("/auth/me/update/", payload);
+}
+
+
+
 // clientes/mascotas
 export function getClientes(params) {
   return api.get("/clientes/", { params });
@@ -207,12 +213,18 @@ export function agregarStockProducto({ producto_id, cantidad, motivo }) {
   });
 }
 
+// ---------- MOTIVOS DE CONSULTA ----------
+
 export const getMotivosConsulta = () =>
-  api.get("/api/motivos-consulta/");
+  api.get("/motivos-consulta/");
 
 export const crearMotivoConsulta = (payload) =>
-  api.post("/api/motivos-consulta/", payload);
-// payload: { codigo: "problema_ortopedico", nombre: "Problemas ortopédicos" }
+  api.post("/motivos-consulta/", payload);
 
+export const editarMotivoConsulta = (id, payload) =>
+  api.put(`/motivos-consulta/${id}/`, payload);
+
+export const eliminarMotivoConsulta = (id) =>
+  api.delete(`/motivos-consulta/${id}/`);
 
 export default api;

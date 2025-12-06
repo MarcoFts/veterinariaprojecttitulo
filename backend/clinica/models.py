@@ -22,6 +22,32 @@ class Cliente(models.Model):
             return full or self.user.username or f"Cliente {self.pk}"
         return f"Cliente {self.pk}"
 
+class Veterinario(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="veterinario",
+    )
+
+    # CAMPOS OBLIGATORIOS
+    telefono = models.CharField(max_length=30)
+    rut_dni = models.CharField(max_length=30)
+    especialidad = models.CharField(max_length=100)
+
+    # OPCIONALES
+    direccion = models.CharField(max_length=255, blank=True)
+    n_registro = models.CharField("N° Registro Profesional", max_length=100, blank=True)
+    anios_experiencia = models.PositiveIntegerField(default=0, blank=True)
+    bio = models.TextField(blank=True)
+
+    # CONFIGURACIÓN DE AGENDA (opcionales)
+    duracion_consulta_min = models.PositiveIntegerField(default=30)
+    trabaja_con_vacunas = models.BooleanField(default=True)
+    trabaja_con_cirugias = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Vet {self.user.first_name} {self.user.last_name}"
+
 
 class Mascota(models.Model):
     SEXO_CHOICES = (

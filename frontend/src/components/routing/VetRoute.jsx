@@ -13,7 +13,7 @@ export default function VetRoute({ children }) {
     );
   }
 
-  const esVet = user && (user.is_vet || user.is_staff);
+  const esVet = user && (user.is_vet === true || user.is_staff === true);
 
   if (!esVet) {
     return <Navigate to="/login/veterinario" replace />;

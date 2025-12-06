@@ -13,6 +13,7 @@ from .models import (
     BloqueoAgenda,
     RegistroClinico,
     MotivoConsulta,
+    Veterinario,
 )
 
 
@@ -139,6 +140,37 @@ class VeterinarioSerializer(serializers.ModelSerializer):
     def get_nombre(self, obj):
         full = f"{obj.first_name} {obj.last_name}".strip()
         return full or obj.email or obj.username
+    
+class VeterinarioModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Veterinario
+        fields = [
+            "telefono",
+            "rut_dni",
+            "especialidad",
+            "direccion",
+            "n_registro",
+            "anios_experiencia",
+            "bio",
+            "duracion_consulta_min",
+            "trabaja_con_vacunas",
+            "trabaja_con_cirugias",
+        ]
+
+    def validate_telefono(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("El teléfono es obligatorio.")
+        return value
+
+    def validate_rut_dni(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("El RUT / DNI es obligatorio.")
+        return value
+
+    def validate_especialidad(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("La especialidad es obligatoria.")
+        return value
 
 
 # ---------- Registro ----------

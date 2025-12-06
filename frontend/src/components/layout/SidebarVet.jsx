@@ -3,14 +3,15 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
   CalendarDays,
-  PawPrint,
+  CalendarCheck,
+  Users2,
   ClipboardList,
+  ClipboardCheck,
+  Boxes,
   Settings,
   User,
   Stethoscope,
   LogOut,
-  Users2,
-  Boxes, // ícono para inventario
 } from "lucide-react";
 import { logout } from "../../auth";
 
@@ -26,7 +27,7 @@ const sections = [
     id: "agenda-dia",
     label: "Agenda del día",
     description: "Citas del día",
-    icon: CalendarDays,
+    icon: CalendarCheck,
   },
   {
     id: "pacientes",
@@ -47,10 +48,16 @@ const sections = [
     icon: Boxes,
   },
   {
-    id: "config",
-    label: "Preferencias",
-    description: "Datos y ajustes",
-    icon: Settings,
+    id: "config-motivos",
+    label: "Motivos consulta",
+    description: "Crear y editar motivos",
+    icon: ClipboardCheck,
+  },
+  {
+    id: "perfil", // 👈 AHORA COINCIDE CON /veterinario/perfil
+    label: "Mi perfil",
+    description: "Datos del veterinario",
+    icon: User,
   },
 ];
 

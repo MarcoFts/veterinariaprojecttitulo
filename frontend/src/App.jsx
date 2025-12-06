@@ -27,7 +27,11 @@ import VetFichaClinica from "./pages/veterinario/VetFichaClinica";
 import VetAgendaDia from "./pages/veterinario/VetAgendaDia";
 import VetHorarios from "./pages/veterinario/VetHorarios";
 import VetInventario from "./pages/veterinario/VetInventario";
+import VetPerfil from "./pages/veterinario/VetPerfil";
 
+
+// ⭐ NUEVA VISTA
+import ConfigMotivosConsulta from "./pages/veterinario/ConfigMotivosConsultas";
 
 function App() {
   return (
@@ -93,7 +97,6 @@ function App() {
         }
       />
 
-
       {/* Veterinario (protegidas) */}
       <Route
         path="/veterinario/home"
@@ -141,7 +144,7 @@ function App() {
       />
 
       <Route
-        path="/vet/horarios"
+        path="/veterinario/horarios"
         element={
           <VetRoute>
             <VetHorarios />
@@ -163,6 +166,26 @@ function App() {
         element={
           <VetRoute>
             <VetFichaClinica />
+          </VetRoute>
+        }
+      />
+
+      <Route
+        path="/veterinario/perfil"
+        element={
+          <VetRoute>
+            <VetPerfil />
+          </VetRoute>
+        }
+      />
+
+
+      {/* ⭐ NUEVA RUTA → CONFIGURAR MOTIVOS */}
+      <Route
+        path="/veterinario/config-motivos"
+        element={
+          <VetRoute>
+            <ConfigMotivosConsulta />
           </VetRoute>
         }
       />
