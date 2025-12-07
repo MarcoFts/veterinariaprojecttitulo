@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, time
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Count, F
 from django.shortcuts import get_object_or_404
 from .email_utils import enviar_notificacion_cita
 from django.core.mail import EmailMultiAlternatives
@@ -67,6 +67,247 @@ def user_is_client(user):
     """
     return hasattr(user, "cliente")
 
+# ---------- REPORTES DE GESTIÓN ----------
+
+class ReporteAgendaView(APIView):
+    """
+    Reporte de ocupación de agenda y no-shows en un rango de fechas.
+
+    - Filtra por fecha de inicio/fin (param GET: desde, hasta)
+    - Opcional: veterinario_id
+    - Si es veterinario logueado, solo ve sus citas.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        # --- leer parámetros de fecha ---
+        hoy = timezone.localdate()
+
+        desde_str = request.GET.get("desde")
+        hasta_str = request.GET.get("hasta")
+        vet_id = request.GET.get("veterinario_id")
+
+        try:
+            if desde_str:
+                desde = datetime.strptime(desde_str, "%Y-%m-%d").date()
+            else:
+                # por defecto últimos 30 días
+                desde = hoy - timedelta(days=30)
+        except ValueError:
+            return Response(
+                {"detail": "Formato de 'desde' inválido. Usa YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            if hasta_str:
+                hasta = datetime.strptime(hasta_str, "%Y-%m-%d").date()
+            else:
+                hasta = hoy
+        except ValueError:
+            return Response(
+                {"detail": "Formato de 'hasta' inválido. Usa YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if desde > hasta:
+            return Response(
+                {"detail": "La fecha 'desde' no puede ser mayor que 'hasta'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # --- construir queryset base ---
+        qs = Cita.objects.filter(
+            inicio__date__gte=desde,
+            inicio__date__lte=hasta,
+        )
+
+        # si viene veterinario_id por parámetro
+        if vet_id:
+            qs = qs.filter(veterinario_id=vet_id)
+
+        # si el usuario es veterinario (no admin), restringimos a sus propias citas
+        if user_is_vet(user) and not user.is_staff:
+            qs = qs.filter(veterinario=user)
+
+        # --- resumen global por estado ---
+        resumen = {
+            "total_citas": qs.count(),
+            "pendientes": qs.filter(estado="pendiente").count(),
+            "confirmadas": qs.filter(estado="confirmada").count(),
+            "atendidas": qs.filter(estado="atendida").count(),
+            "no_asistidas": qs.filter(estado="no_asistida").count(),
+            "canceladas": qs.filter(estado="cancelada").count(),
+        }
+
+        # --- agrupado por día ---
+        por_dia_qs = (
+            qs.values("inicio__date")
+            .annotate(
+                total=Count("id"),
+                atendidas=Count("id", filter=Q(estado="atendida")),
+                no_asistidas=Count("id", filter=Q(estado="no_asistida")),
+                canceladas=Count("id", filter=Q(estado="cancelada")),
+                pendientes=Count("id", filter=Q(estado="pendiente")),
+                confirmadas=Count("id", filter=Q(estado="confirmada")),
+            )
+            .order_by("inicio__date")
+        )
+
+        por_dia = [
+            {
+                "fecha": item["inicio__date"].isoformat(),
+                "total_citas": item["total"],
+                "pendientes": item["pendientes"],
+                "confirmadas": item["confirmadas"],
+                "atendidas": item["atendidas"],
+                "no_asistidas": item["no_asistidas"],
+                "canceladas": item["canceladas"],
+            }
+            for item in por_dia_qs
+        ]
+
+        # --- agrupado por veterinario ---
+        por_vet_qs = (
+            qs.values(
+                "veterinario_id",
+                "veterinario__first_name",
+                "veterinario__last_name",
+            )
+            .annotate(
+                total=Count("id"),
+                pendientes=Count("id", filter=Q(estado="pendiente")),
+                confirmadas=Count("id", filter=Q(estado="confirmada")),
+                atendidas=Count("id", filter=Q(estado="atendida")),
+                no_asistidas=Count("id", filter=Q(estado="no_asistida")),
+            )
+            .order_by("veterinario__last_name", "veterinario__first_name")
+        )
+
+        por_veterinario = [
+            {
+                "id": item["veterinario_id"],
+                "nombre": (
+                    f"{item['veterinario__first_name']} "
+                    f"{item['veterinario__last_name']}"
+                ).strip(),
+                "total_citas": item["total"],
+                "pendientes": item["pendientes"],
+                "confirmadas": item["confirmadas"],
+                "atendidas": item["atendidas"],
+                "no_asistidas": item["no_asistidas"],
+            }
+            for item in por_vet_qs
+            if item["veterinario_id"] is not None
+        ]
+
+        data = {
+            "desde": desde.isoformat(),
+            "hasta": hasta.isoformat(),
+            "resumen": resumen,
+            "por_dia": por_dia,
+            "por_veterinario": por_veterinario,
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
+
+# ---------- REPORTE DE INVENTARIO ----------
+
+class ReporteInventarioView(APIView):
+    """
+    Reporte de stock de productos / insumos.
+
+    - Resumen general de stock.
+    - Productos con stock bajo (<= stock_minimo).
+    - Productos sin stock.
+    - Productos próximos a vencer (por defecto dentro de 30 días).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        hoy = timezone.localdate()
+        # Permitir configurar ventana de alerta por query param (opcional)
+        try:
+            dias_alerta = int(request.GET.get("dias_alerta", 30))
+        except ValueError:
+            dias_alerta = 30
+
+        productos = Producto.objects.all().order_by("nombre")
+
+        # --- Resumen general ---
+        total_productos = productos.count()
+        con_stock = productos.filter(stock__gt=0).count()
+        sin_stock = productos.filter(stock__lte=0).count()
+
+        bajo_stock_qs = productos.filter(
+            stock_minimo__gt=0,
+            stock__lte=F("stock_minimo"),
+        )
+
+        bajo_stock = bajo_stock_qs.count()
+
+        proximos_vencer_qs = productos.filter(
+            fecha_vencimiento__isnull=False,
+            fecha_vencimiento__lte=hoy + timedelta(days=dias_alerta),
+        )
+
+        proximos_vencer = proximos_vencer_qs.count()
+
+        # --- Listas detalladas (recortadas para no explotar el JSON) ---
+        criticos = [
+            {
+                "id": p.id,
+                "nombre": p.nombre,
+                "categoria": p.categoria,
+                "stock": p.stock,
+                "stock_minimo": p.stock_minimo,
+            }
+            for p in bajo_stock_qs[:50]
+        ]
+
+        sin_stock_lista = [
+            {
+                "id": p.id,
+                "nombre": p.nombre,
+                "categoria": p.categoria,
+                "stock": p.stock,
+            }
+            for p in productos.filter(stock__lte=0)[:50]
+        ]
+
+        proximos_vencer_lista = [
+            {
+                "id": p.id,
+                "nombre": p.nombre,
+                "categoria": p.categoria,
+                "stock": p.stock,
+                "fecha_vencimiento": (
+                    p.fecha_vencimiento.isoformat() if p.fecha_vencimiento else None
+                ),
+            }
+            for p in proximos_vencer_qs[:50]
+        ]
+
+        data = {
+            "hoy": hoy.isoformat(),
+            "dias_alerta": dias_alerta,
+            "resumen": {
+                "total_productos": total_productos,
+                "con_stock": con_stock,
+                "sin_stock": sin_stock,
+                "bajo_stock": bajo_stock,
+                "proximos_a_vencer": proximos_vencer,
+            },
+            "criticos": criticos,
+            "sin_stock": sin_stock_lista,
+            "proximos_a_vencer": proximos_vencer_lista,
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
 
 # ---------- CLIENTES ----------
 class ClienteViewSet(viewsets.ModelViewSet):

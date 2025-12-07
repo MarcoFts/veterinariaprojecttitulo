@@ -438,11 +438,12 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 from .models import Cita  # por si acaso
 
                 if isinstance(cita, Cita):
-                    cita.estado = "completada"
+                    cita.estado = "atendida"
                     cita.save(update_fields=["estado"])
             except Exception:
                 # No rompemos la creación del registro si algo falla aquí
                 pass
+
 
         return registro
 

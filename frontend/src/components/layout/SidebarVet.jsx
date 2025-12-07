@@ -12,6 +12,7 @@ import {
   User,
   Stethoscope,
   LogOut,
+  BarChart2,
 } from "lucide-react";
 import { logout } from "../../auth";
 
@@ -48,13 +49,19 @@ const sections = [
     icon: Boxes,
   },
   {
+    id: "reportes",
+    label: "Reportes",
+    description: "Indicadores y gestión", 
+    icon: BarChart2,
+  },
+  {
     id: "config-motivos",
     label: "Motivos consulta",
     description: "Crear y editar motivos",
     icon: ClipboardCheck,
   },
   {
-    id: "perfil", // 👈 AHORA COINCIDE CON /veterinario/perfil
+    id: "perfil",
     label: "Mi perfil",
     description: "Datos del veterinario",
     icon: User,

@@ -227,4 +227,32 @@ export const editarMotivoConsulta = (id, payload) =>
 export const eliminarMotivoConsulta = (id) =>
   api.delete(`/motivos-consulta/${id}/`);
 
+// ---------- REPORTES (RF06) ----------
+
+export async function getReporteAgenda({ desde, hasta, veterinario_id } = {}) {
+  const response = await api.get("/reportes/agenda/", {
+    params: {
+      desde,
+      hasta,
+      veterinario_id,
+    },
+  });
+  return response.data;
+}
+
+export async function getReporteInventario({ dias_alerta } = {}) {
+  const response = await api.get("/reportes/inventario/", {
+    params: {
+      dias_alerta,
+    },
+  });
+  return response.data;
+}
+
+export const atenderCita = (id) =>
+  api.patch(`/citas/${id}/atender/`);
+
+export const marcarNoAsistida = (id) =>
+  api.patch(`/citas/${id}/no_asistio/`);
+
 export default api;

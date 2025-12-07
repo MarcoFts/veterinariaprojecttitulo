@@ -28,9 +28,8 @@ import VetAgendaDia from "./pages/veterinario/VetAgendaDia";
 import VetHorarios from "./pages/veterinario/VetHorarios";
 import VetInventario from "./pages/veterinario/VetInventario";
 import VetPerfil from "./pages/veterinario/VetPerfil";
+import VetReportes from "./pages/veterinario/VetReportes";
 
-
-// ⭐ NUEVA VISTA
 import ConfigMotivosConsulta from "./pages/veterinario/ConfigMotivosConsultas";
 
 function App() {
@@ -178,8 +177,7 @@ function App() {
           </VetRoute>
         }
       />
-
-
+      <Route path="/veterinario/reportes" element={<VetReportes />} />
       {/* ⭐ NUEVA RUTA → CONFIGURAR MOTIVOS */}
       <Route
         path="/veterinario/config-motivos"
@@ -189,8 +187,6 @@ function App() {
           </VetRoute>
         }
       />
-
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/seleccion-login" replace />} />
 
     </Routes>

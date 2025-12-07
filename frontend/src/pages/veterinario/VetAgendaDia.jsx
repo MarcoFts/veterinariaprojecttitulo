@@ -9,7 +9,10 @@ import {
   getDisponibilidad,
   getCitas,
   confirmarCita,
-  getClientes, // 👈 para resolver nombre del dueño
+  getClientes,
+  cancelarCita,
+  atenderCita,
+  marcarNoAsistida,
 } from "../../services/api";
 
 import dayjs from "dayjs";
@@ -42,8 +45,17 @@ export default function VetAgendaDia() {
 
   const [reloadAgenda, setReloadAgenda] = useState(0);
 
-  // mapa idCliente -> nombre (Marco Fuentes, Prueba 2222, etc.)
+  // mapa idCliente -> nombre (Marco Fuentes, etc.)
   const [clientesMap, setClientesMap] = useState({});
+
+  // cita seleccionada para abrir modal de acciones
+  const [citaAcciones, setCitaAcciones] = useState(null);
+
+  // modal confirmar cita
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [citaAConfirmar, setCitaAConfirmar] = useState(null);
+  const [boxConfirm, setBoxConfirm] = useState("");
+  const [savingConfirm, setSavingConfirm] = useState(false);
 
   // tira de días de la semana visible
   const upcomingDays = useMemo(() => {
@@ -68,12 +80,6 @@ export default function VetAgendaDia() {
 
   const handleWeekNav = (direction) =>
     setWeekOffset((prev) => prev + (direction === "next" ? 7 : -7));
-
-  // modal confirmar cita
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [citaAConfirmar, setCitaAConfirmar] = useState(null);
-  const [boxConfirm, setBoxConfirm] = useState("");
-  const [savingConfirm, setSavingConfirm] = useState(false);
 
   const abrirConfirmar = (slot) => {
     if (!slot.citaId) return;
@@ -103,20 +109,91 @@ export default function VetAgendaDia() {
         prev.map((s) =>
           s.id === citaAConfirmar.id
             ? {
-              ...s,
-              estadoCita: "confirmada",
-              estado: "ocupada",
-              box: boxConfirm || null,
-            }
+                ...s,
+                estadoCita: "confirmada",
+                estado: "ocupada",
+                box: boxConfirm || null,
+              }
             : s
         )
       );
       cerrarConfirmar();
+      setReloadAgenda((n) => n + 1);
     } catch (err) {
       console.error("Error confirmando cita:", err);
       setError("No se pudo confirmar la cita.");
     } finally {
       setSavingConfirm(false);
+    }
+  };
+
+  // cancelar en backend + refrescar estado local
+  const handleCancelarCita = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Seguro que deseas cancelar esta cita?");
+    if (!ok) return;
+
+    try {
+      await cancelarCita(slot.citaId);
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? { ...s, estado: "cancelada", estadoCita: "cancelada" }
+            : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error cancelando cita:", err);
+      setError("No se pudo cancelar la cita en el servidor.");
+    }
+  };
+
+  // marcar como ATENDIDA
+  const handleMarcarAtendida = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Marcar esta cita como ATENDIDA?");
+    if (!ok) return;
+
+    try {
+      const res = await atenderCita(slot.citaId); // PATCH /citas/:id/atender/
+      const nuevoEstado = res?.data?.estado || "atendida";
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.citaId === slot.citaId ? { ...s, estadoCita: nuevoEstado } : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error marcando cita como atendida:", err);
+      setError("No se pudo marcar la cita como atendida.");
+    }
+  };
+
+  // marcar como NO ASISTIDA
+  const handleMarcarNoAsistida = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Marcar esta cita como NO ASISTIDA?");
+    if (!ok) return;
+
+    try {
+      const res = await marcarNoAsistida(slot.citaId); // PATCH /citas/:id/no_asistio/
+      const nuevoEstado = res?.data?.estado || "no_asistida";
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.citaId === slot.citaId ? { ...s, estadoCita: nuevoEstado } : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error marcando cita como no asistida:", err);
+      setError("No se pudo marcar la cita como no asistida.");
     }
   };
 
@@ -139,19 +216,17 @@ export default function VetAgendaDia() {
     const fetchClientes = async () => {
       try {
         const res = await getClientes();
-        const bruta = Array.isArray(res.data) ? res.data : res.data?.results || [];
-
-        const soloClientes = bruta.filter(
-          (u) => String(u.rol).toLowerCase() === "cliente"
-        );
+        const lista = Array.isArray(res.data)
+          ? res.data
+          : res.data?.results || [];
 
         const map = {};
-        soloClientes.forEach((c) => {
+        lista.forEach((c) => {
           map[c.id] =
             c.nombre_completo || c.nombre || c.email || `Cliente #${c.id}`;
         });
-        setClientesMap(map);
 
+        setClientesMap(map);
       } catch (err) {
         console.error("Error cargando clientes:", err);
       }
@@ -194,8 +269,8 @@ export default function VetAgendaDia() {
           const rawCitas = Array.isArray(citasRes.data)
             ? citasRes.data
             : Array.isArray(citasRes.data?.results)
-              ? citasRes.data.results
-              : [];
+            ? citasRes.data.results
+            : [];
 
           const citas = rawCitas.map((c) => {
             const d = new Date(c.inicio);
@@ -209,17 +284,14 @@ export default function VetAgendaDia() {
               c.motivo_texto ||
               null;
 
-            // Duración de la cita (si el backend la envía, la usamos; si no, 30 min)
             const duracion =
               c.duracion || c.duracion_minutos || c.duracion_min || 30;
 
-            // ID posible del cliente
             const clienteIdCrudo =
               c.cliente_id !== undefined && c.cliente_id !== null
                 ? c.cliente_id
                 : c.cliente ?? null;
 
-            // Intentamos nombres que vengan directo del backend
             let pacienteNombre =
               c.cliente_nombre ||
               c.cliente_nombre_completo ||
@@ -232,7 +304,6 @@ export default function VetAgendaDia() {
               c.mascota?.cliente?.nombre ||
               null;
 
-            // Si no vino nombre, lo buscamos en el mapa de clientes
             if (!pacienteNombre && clienteIdCrudo && clientesMap) {
               const idNumber = Number(clienteIdCrudo);
               if (!Number.isNaN(idNumber) && clientesMap[idNumber]) {
@@ -240,7 +311,6 @@ export default function VetAgendaDia() {
               }
             }
 
-            // Fallback final
             if (!pacienteNombre && clienteIdCrudo) {
               pacienteNombre = `Cliente #${clienteIdCrudo}`;
             }
@@ -264,7 +334,7 @@ export default function VetAgendaDia() {
           const horasOrdenadasDia = Array.from(horasDiaSet).sort();
 
           horasOrdenadasDia.forEach((hora) => {
-            horasSet.add(hora); // para la tabla global
+            horasSet.add(hora);
 
             const cita = citas.find((c) => c.horaInicio === hora);
 
@@ -279,8 +349,13 @@ export default function VetAgendaDia() {
                 cita.cliente_nombre ||
                 cita.cliente?.nombre_completo ||
                 cita.cliente?.nombre ||
-                (cita.cliente_id ? `Cliente #${cita.cliente_id}` : null) ||
-                (cita.cliente ? `Cliente #${cita.cliente}` : null);
+                (cita.cliente_id && clientesMap[Number(cita.cliente_id)]) ||
+                (cita.cliente && clientesMap[Number(cita.cliente)]) ||
+                (cita.cliente_id
+                  ? `Cliente #${cita.cliente_id}`
+                  : cita.cliente
+                  ? `Cliente #${cita.cliente}`
+                  : null);
 
               allSlots.push({
                 id: cita.id || `${fechaDia}-${hora}`,
@@ -330,51 +405,53 @@ export default function VetAgendaDia() {
   }, [vetId, weekOffset, reloadAgenda, clientesMap]);
 
   const handleAsignarConfirm = (payload) => {
-    // { slot_id, cliente_id, cliente_nombre, mascota_id, mascota_nombre, motivo, box }
     setSlots((prev) =>
       prev.map((s) =>
         s.id === payload.slot_id
           ? {
-            ...s,
-            estado: "ocupada",
-            estadoCita: "pendiente",
-            paciente: payload.cliente_nombre || s.paciente,
-            mascota: payload.mascota_nombre || s.mascota,
-            motivo: payload.motivo || s.motivo,
-            box: payload.box || s.box,
-          }
+              ...s,
+              estado: "ocupada",
+              estadoCita: "pendiente",
+              paciente: payload.cliente_nombre || s.paciente,
+              mascota: payload.mascota_nombre || s.mascota,
+              motivo: payload.motivo || s.motivo,
+              box: payload.box || s.box,
+            }
           : s
       )
     );
     setSlotParaAsignar(null);
-    setReloadAgenda((n) => n + 1); // recarga backend
-  };
-
-  const handleCancelarSlot = (slotId) => {
-    setSlots((prev) =>
-      prev.map((s) =>
-        s.id === slotId
-          ? { ...s, estado: "cancelada", estadoCita: "cancelada" }
-          : s
-      )
-    );
+    setReloadAgenda((n) => n + 1);
   };
 
   const getEstadoChip = (slot) => {
-    if (slot.estado === "libre")
-      return (
-        <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
-          Libre
-        </span>
-      );
-
-    if (slot.estado === "cancelada")
+    // Cancelada primero
+    if (slot.estado === "cancelada") {
       return (
         <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-[1px] text-[9px] font-medium text-rose-700">
           Cancelada
         </span>
       );
+    }
 
+    // Estados de asistencia
+    if (slot.estadoCita === "atendida") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
+          Atendida
+        </span>
+      );
+    }
+
+    if (slot.estadoCita === "no_asistida") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
+          No asistencia
+        </span>
+      );
+    }
+
+    // Confirmada
     if (slot.estadoCita === "confirmada") {
       return (
         <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-[1px] text-[9px] font-medium text-sky-700">
@@ -382,6 +459,17 @@ export default function VetAgendaDia() {
         </span>
       );
     }
+
+    // Libre
+    if (slot.estado === "libre") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
+          Libre
+        </span>
+      );
+    }
+
+    // Por defecto pendiente
     return (
       <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
         Pendiente
@@ -546,8 +634,7 @@ export default function VetAgendaDia() {
                         {upcomingDays.map((d) => {
                           const slot = slots.find(
                             (s) =>
-                              s.fecha === d.value &&
-                              s.horaInicio === hora
+                              s.fecha === d.value && s.horaInicio === hora
                           );
 
                           if (!slot) {
@@ -569,7 +656,7 @@ export default function VetAgendaDia() {
                                   if (slot.estado === "libre") {
                                     setSlotParaAsignar(slot);
                                   } else if (slot.citaId) {
-                                    abrirConfirmar(slot);
+                                    setCitaAcciones(slot);
                                   }
                                 }}
                               >
@@ -598,32 +685,24 @@ export default function VetAgendaDia() {
                                   <div className="flex flex-col gap-0.5">
                                     <div className="flex items-start justify-between gap-1">
                                       <div className="space-y-[1px]">
-                                        {/* rango de hora */}
                                         <p className="text-[9px] font-semibold text-slate-500">
-                                          {slot.horaInicio} –{" "}
-                                          {slot.horaFin}
+                                          {slot.horaInicio} – {slot.horaFin}
                                         </p>
-
-                                        {/* mascota */}
                                         <p className="text-[10px] font-semibold text-slate-900 line-clamp-1">
                                           {slot.mascota ||
                                             "Mascota sin nombre"}
                                         </p>
-
-                                        {/* dueño */}
                                         <p className="text-[9px] text-slate-600 line-clamp-1">
                                           Dueño:{" "}
                                           {slot.paciente ||
                                             "Cliente no registrado"}
                                         </p>
                                       </div>
-
                                       <div className="flex flex-col items-end gap-0.5">
                                         {getEstadoChip(slot)}
                                         {slot.box && (
                                           <span className="text-[9px] text-slate-500">
-                                            Box:{" "}
-                                            <strong>{slot.box}</strong>
+                                            Box: <strong>{slot.box}</strong>
                                           </span>
                                         )}
                                       </div>
@@ -633,52 +712,22 @@ export default function VetAgendaDia() {
                                       {slot.motivo ||
                                         "Sin motivo registrado"}
                                     </p>
-                                    <div className="flex flex-wrap justify-start gap-1 mt-2">
-                                      {/* Confirmar (solo si no está ya confirmada ni cancelada) */}
-                                      {slot.estado !== "cancelada" &&
-                                        slot.estadoCita !== "confirmada" && (
-                                          <button
-                                            type="button"
-                                            className="min-w-[90px] text-left rounded-md bg-emerald-500 px-2 py-[4px] text-[10px] font-semibold text-white hover:bg-emerald-600 whitespace-nowrap"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              abrirConfirmar(slot);
-                                            }}
-                                          >
-                                            Confirmar
-                                          </button>
-                                        )}
 
-                                      {/* Reprogramar */}
-                                      <button
-                                        type="button"
-                                        className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50 whitespace-nowrap"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (!slot.citaId) return;
-                                          setCitaParaReprogramar({
-                                            id: slot.citaId,
-                                            inicio: `${slot.fecha}T${slot.horaInicio}`,
-                                            box: slot.box || "",
-                                          });
-                                        }}
-                                      >
-                                        Reprogramar
-                                      </button>
+                                    {/* estado de asistencia opcional */}
+                                    {slot.estadoCita === "atendida" && (
+                                      <p className="text-[9px] text-emerald-700 font-semibold">
+                                        Estado: Atendida
+                                      </p>
+                                    )}
+                                    {slot.estadoCita === "no_asistida" && (
+                                      <p className="text-[9px] text-amber-700 font-semibold">
+                                        Estado: No asistencia
+                                      </p>
+                                    )}
 
-                                      {/* Cancelar */}
-                                      <button
-                                        type="button"
-                                        className="min-w-[90px] text-left rounded-md bg-white/70 px-2 py-[4px] text-[10px] font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50 whitespace-nowrap"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCancelarSlot(slot.id);
-                                        }}
-                                      >
-                                        Cancelar
-                                      </button>
-
-                                    </div>
+                                    <p className="mt-1 text-[9px] text-slate-400 italic">
+                                      Click para ver opciones
+                                    </p>
                                   </div>
                                 )}
                               </div>
@@ -715,16 +764,55 @@ export default function VetAgendaDia() {
             prev.map((s) =>
               s.citaId === id
                 ? {
-                  ...s,
-                  fecha: nueva_fecha || s.fecha,
-                  horaInicio: nueva_hora,
-                  horaFin: sumarMinutos(nueva_hora, 30),
-                }
+                    ...s,
+                    fecha: nueva_fecha || s.fecha,
+                    horaInicio: nueva_hora,
+                    horaFin: sumarMinutos(nueva_hora, 30),
+                  }
                 : s
             )
           );
         }}
       />
+
+      {/* Modal de opciones de la cita ocupada */}
+      {citaAcciones && (
+        <ModalAccionesCita
+          slot={citaAcciones}
+          getEstadoChip={getEstadoChip}
+          onClose={() => setCitaAcciones(null)}
+          onConfirmar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            abrirConfirmar(slot);
+          }}
+          onReprogramar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            if (!slot.citaId) return;
+            setCitaParaReprogramar({
+              id: slot.citaId,
+              inicio: `${slot.fecha}T${slot.horaInicio}`,
+              box: slot.box || "",
+            });
+          }}
+          onCancelar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleCancelarCita(slot);
+          }}
+          onMarcarAtendida={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleMarcarAtendida(slot);
+          }}
+          onMarcarNoAsistida={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleMarcarNoAsistida(slot);
+          }}
+        />
+      )}
 
       {/* Modal confirmar cita + sala */}
       {showConfirmModal && citaAConfirmar && (
@@ -785,5 +873,141 @@ export default function VetAgendaDia() {
         </div>
       )}
     </LayoutVet>
+  );
+}
+
+/**
+ * Modal para mostrar la información de una cita ocupada
+ * y ofrecer acciones: Confirmar, Reprogramar, Cancelar, Atendida, No asistencia.
+ */
+function ModalAccionesCita({
+  slot,
+  getEstadoChip,
+  onClose,
+  onConfirmar,
+  onReprogramar,
+  onCancelar,
+  onMarcarAtendida,
+  onMarcarNoAsistida,
+}) {
+  if (!slot) return null;
+
+  const fechaLabel = dayjs(slot.fecha).format("dddd DD [de] MMMM YYYY");
+
+  const estaCancelada = slot.estado === "cancelada";
+  const yaMarcadaAsistencia =
+    slot.estadoCita === "atendida" || slot.estadoCita === "no_asistida";
+
+  // botones de asistencia solo si no está cancelada ni ya marcada
+  const mostrarBotonesAsistencia = !estaCancelada && !yaMarcadaAsistencia;
+
+  // botón confirmar solo si está pendiente
+  const mostrarBotonConfirmar =
+    !estaCancelada &&
+    slot.estadoCita !== "confirmada" &&
+    !yaMarcadaAsistencia;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Detalles de la cita
+            </p>
+            <p className="text-xs text-slate-500">
+              {fechaLabel} · {slot.horaInicio} - {slot.horaFin}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-500">Mascota</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {slot.mascota || "Mascota sin nombre"}
+              </p>
+              <p className="text-xs text-slate-600">
+                Dueño: {slot.paciente || "Cliente no registrado"}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              {getEstadoChip(slot)}
+              {slot.box && (
+                <span className="text-[11px] text-slate-500">
+                  Box: <strong>{slot.box}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Motivo</p>
+            <p className="text-xs text-slate-700">
+              {slot.motivo || "Sin motivo registrado"}
+            </p>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+            {mostrarBotonConfirmar && (
+              <button
+                type="button"
+                onClick={onConfirmar}
+                className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+              >
+                Confirmar cita
+              </button>
+            )}
+
+            {mostrarBotonesAsistencia && (
+              <>
+                <button
+                  type="button"
+                  onClick={onMarcarAtendida}
+                  className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50"
+                >
+                  Marcar como atendida
+                </button>
+                <button
+                  type="button"
+                  onClick={onMarcarNoAsistida}
+                  className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-amber-700 border border-amber-200 hover:bg-amber-50"
+                >
+                  Marcar como no asistencia
+                </button>
+              </>
+            )}
+
+            {!estaCancelada && (
+              <button
+                type="button"
+                onClick={onReprogramar}
+                className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50"
+              >
+                Reprogramar
+              </button>
+            )}
+
+            {!estaCancelada && (
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50"
+              >
+                Cancelar cita
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

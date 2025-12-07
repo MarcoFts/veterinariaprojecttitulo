@@ -3,9 +3,6 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from clinica.auth_views import EmailTokenObtainPairView
 from .views import UpdateVetProfileView
-
-
-# Vistas existentes
 from .views import (
     disponibilidad,
     veterinarios,
@@ -19,6 +16,8 @@ from .views import (
     me,
     RegistroClinicoViewSet,
     MotivoConsultaListCreateAPIView,
+    ReporteAgendaView,
+    ReporteInventarioView,
 )
 
 # Vistas de autenticación
@@ -66,4 +65,15 @@ urlpatterns = [
     path("api/veterinarios/", veterinarios, name="veterinarios"),
      # Motivos de consulta (predefinidos)
     path("api/motivos-consulta/", MotivoConsultaListCreateAPIView.as_view(), name="motivos-consulta"),
+        # Reportes de gestión
+    path(
+        "api/reportes/agenda/",
+        ReporteAgendaView.as_view(),
+        name="reporte-agenda",
+    ),
+        path(
+        "api/reportes/inventario/",
+        ReporteInventarioView.as_view(),
+        name="reporte-inventario",
+    ),
 ]
