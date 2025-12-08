@@ -13,7 +13,7 @@ import { useAuth } from "../../context/AuthContext";
 
 dayjs.locale("es");
 
-const CODIGO_OTRO = "otro"; // 👈 código estándar para "Otro motivo"
+const CODIGO_OTRO = "otro";
 
 export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
   const { user } = useAuth(); // veterinario logueado
@@ -35,7 +35,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     box: "",
   });
 
-  // --------- Mascotas filtradas SOLO del cliente elegido ---------
+  // Mascotas filtradas solo del cliente elegido
   const mascotasCliente = useMemo(() => {
     if (!form.cliente) return [];
 
@@ -91,7 +91,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     return mascotas;
   }, [mascotas, form.cliente, clientes]);
 
-  // 1) Al abrir el modal: cargar clientes + motivos
+  // Al abrir el modal: reset y cargar clientes + motivos
   useEffect(() => {
     if (!open || !slot) return;
 
@@ -113,13 +113,10 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
           getMotivosConsulta(),
         ]);
 
-        // /clientes/ YA devuelve solo clientes
         setClientes(Array.isArray(cliRes.data) ? cliRes.data : []);
 
-        // Motivos desde backend (id, codigo, nombre, activo...)
         let base = motRes.data || [];
 
-        // Aseguramos que exista "otro" por código
         const tieneOtro = base.some(
           (m) => (m.codigo || "").toLowerCase() === CODIGO_OTRO
         );
@@ -142,7 +139,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     cargarDatos();
   }, [open, slot]);
 
-  // 2) Cada vez que cambia el cliente → pedir mascotas
+  // Cada vez que cambia el cliente → pedir mascotas
   useEffect(() => {
     if (!open) return;
 
@@ -163,7 +160,6 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
           ? res.data
           : res.data?.results || [];
 
-        console.log("Mascotas recibidas para cliente", form.cliente, ">", lista);
         setMascotas(lista);
       } catch (err) {
         console.error("Error cargando mascotas:", err);
@@ -186,6 +182,28 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
     }));
   };
 
+  // Resuelve nombre legible del cliente para usarlo al actualizar el slot en la agenda
+  const getNombreClienteSeleccionado = () => {
+    const c = clientes.find(
+      (cli) => String(cli.id) === String(form.cliente)
+    );
+    return (
+      c?.nombre_completo ||
+      c?.nombre ||
+      c?.email ||
+      (c ? `Cliente #${c.id}` : "")
+    );
+  };
+
+  // Resuelve nombre de la mascota seleccionada
+  const getNombreMascotaSeleccionada = () => {
+    const m = mascotasCliente.find(
+      (masc) => String(masc.id) === String(form.mascota)
+    );
+    if (!m) return "";
+    return m.nombre || `Mascota #${m.id}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!slot) return;
@@ -200,7 +218,7 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       return;
     }
 
-    // Motivo texto final que va al backend
+    // Motivo final que va como texto plano al backend
     let motivoFinal = "";
 
     if (form.motivoCodigo === CODIGO_OTRO) {
@@ -216,12 +234,10 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       motivoFinal = motivoObj?.nombre || "Motivo de consulta";
     }
 
-    // Fecha/hora: "YYYY-MM-DDTHH:mm:ss"
     const fechaISO = slot.fecha;
     const inicioISO = `${fechaISO}T${slot.horaInicio}:00`;
     const finISO = `${fechaISO}T${slot.horaFin}:00`;
 
-    // Veterinario = usuario logueado
     const vetIdRaw =
       user?.veterinario_id ??
       user?.id ??
@@ -240,25 +256,51 @@ export default function ModalCrearCita({ open, slot, onClose, onConfirm }) {
       cliente_id: Number(form.cliente),
       mascota_id: Number(form.mascota),
       veterinario_id: Number(vetIdRaw),
-      motivo: motivoFinal, // 👈 texto final que espera el backend
+      motivo: motivoFinal,
       box: form.box || slot.box || "",
       inicio: inicioISO,
       fin: finISO,
     };
 
-    console.log("Payload crearCita (vet):", payload);
-
     setSaving(true);
+    setError("");
 
     try {
       const res = await crearCita(payload);
 
-      if (onConfirm) onConfirm(res.data);
+      const clienteNombre = getNombreClienteSeleccionado();
+      const mascotaNombre = getNombreMascotaSeleccionada();
+
+      // Avisamos al padre con los datos que necesita para actualizar el slot
+      if (onConfirm) {
+        onConfirm({
+          slot_id: slot.id,
+          cita_id: res?.data?.id,
+          cliente_nombre: clienteNombre,
+          mascota_nombre: mascotaNombre,
+          motivo: motivoFinal,
+          box: payload.box,
+        });
+      }
+
       onClose && onClose();
     } catch (error) {
       console.error("Error al crear cita:", error);
-      console.log("Detalle backend:", error?.response?.data);
-      alert("Error al crear la cita.");
+      const data = error?.response?.data;
+      let msg = "Error al crear la cita.";
+
+      if (data) {
+        if (typeof data === "string") {
+          msg = data;
+        } else if (Array.isArray(data.non_field_errors) && data.non_field_errors[0]) {
+          msg = data.non_field_errors[0];
+        } else if (typeof data.detail === "string") {
+          msg = data.detail;
+        }
+      }
+
+      setError(msg);
+      alert(msg);
     } finally {
       setSaving(false);
     }

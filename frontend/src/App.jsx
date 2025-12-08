@@ -29,6 +29,7 @@ import VetHorarios from "./pages/veterinario/VetHorarios";
 import VetInventario from "./pages/veterinario/VetInventario";
 import VetPerfil from "./pages/veterinario/VetPerfil";
 import VetReportes from "./pages/veterinario/VetReportes";
+import ClientePerfil from "./pages/cliente/ClientePerfil";
 
 import ConfigMotivosConsulta from "./pages/veterinario/ConfigMotivosConsultas";
 
@@ -95,6 +96,7 @@ function App() {
           </ClienteRoute>
         }
       />
+      <Route path="/cliente/perfil" element={<ClientePerfil />} />
 
       {/* Veterinario (protegidas) */}
       <Route
@@ -178,7 +180,6 @@ function App() {
         }
       />
       <Route path="/veterinario/reportes" element={<VetReportes />} />
-      {/* ⭐ NUEVA RUTA → CONFIGURAR MOTIVOS */}
       <Route
         path="/veterinario/config-motivos"
         element={

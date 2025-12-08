@@ -1,323 +1,343 @@
-// frontend/src/pages/veterinario/VetCitas.jsx
-import { useEffect, useState } from "react";
+// src/pages/veterinario/VetCitas.jsx
+import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
+import "dayjs/locale/es";
+dayjs.locale("es");
+
 import LayoutVet from "../../components/layout/LayoutVet";
-import {
-  CalendarDays,
-  Clock,
-  PawPrint,
-  User,
-  RefreshCw,
-  AlertCircle,
-} from "lucide-react";
-import {
-  getCitas,
-  reprogramarCita,
-  getDisponibilidad,
-} from "../../services/api";
+import { getClientes, getMascotas, getCitas } from "../../services/api";
+import { CalendarDays, Users, Dog, Filter } from "lucide-react";
+
+const ESTADOS = [
+  { value: "", label: "Todos" },
+  { value: "pendiente", label: "Pendiente" },
+  { value: "confirmada", label: "Confirmada" },
+  { value: "atendida", label: "Atendida" },
+  { value: "no_asistida", label: "No asistida" },
+  { value: "cancelada", label: "Cancelada" },
+];
 
 export default function VetCitas() {
-  const [fecha, setFecha] = useState(dayjs().format("YYYY-MM-DD"));
+  const hoy = dayjs().format("YYYY-MM-DD");
+  const hace90dias = dayjs().subtract(90, "day").format("YYYY-MM-DD");
+
+  const [clientes, setClientes] = useState([]);
+  const [mascotas, setMascotas] = useState([]);
   const [citas, setCitas] = useState([]);
+
+  const [filtros, setFiltros] = useState({
+    desde: hace90dias,
+    hasta: hoy,
+    clienteId: "",
+    mascotaId: "",
+    estado: "",
+  });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Estado para reprogramar
-  const [showModal, setShowModal] = useState(false);
-  const [selectedCita, setSelectedCita] = useState(null);
-  const [nuevaFecha, setNuevaFecha] = useState(dayjs().format("YYYY-MM-DD"));
-  const [slots, setSlots] = useState([]);
-  const [slotSeleccionado, setSlotSeleccionado] = useState("");
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // ------ handlers ------
+  const handleChangeFiltro = (e) => {
+    const { name, value } = e.target;
+    setFiltros((prev) => ({
+      ...prev,
+      [name]: value,
+      // si se cambia el cliente, limpiamos mascota
+      ...(name === "clienteId" ? { mascotaId: "" } : {}),
+    }));
+  };
 
-  // --- Cargar citas del día ---
-  const loadCitas = async () => {
+  const cargarClientes = async () => {
+    try {
+      const resp = await getClientes();
+      setClientes(resp.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const cargarMascotas = async (clienteId) => {
+    if (!clienteId) {
+      setMascotas([]);
+      return;
+    }
+    try {
+      const resp = await getMascotas({ cliente: clienteId });
+      setMascotas(resp.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const cargarCitas = async () => {
     setLoading(true);
     setError("");
+
     try {
-      const resp = await getCitas({ fecha });
+      const params = {};
+
+      if (filtros.desde) params.desde = filtros.desde;
+      if (filtros.hasta) params.hasta = filtros.hasta;
+      if (filtros.clienteId) params.cliente = filtros.clienteId;
+      if (filtros.mascotaId) params.mascota = filtros.mascotaId;
+      if (filtros.estado) params.estado = filtros.estado;
+
+      const resp = await getCitas(params);
       setCitas(resp.data || []);
     } catch (err) {
-      if (err?.response?.status === 401) {
-        setError("Tu sesión expiró. Vuelve a iniciar sesión.");
-      } else {
-        setError("No se pudieron cargar las citas desde el servidor.");
-      }
+      console.error(err);
+      setError("No se pudieron cargar las citas. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
   };
 
+  // carga inicial
   useEffect(() => {
-    loadCitas();
-  }, [fecha]);
+    cargarClientes();
+    cargarCitas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // --- Cargar slots disponibles para la cita seleccionada ---
-  const cargarSlots = async (cita, fechaSlot) => {
-    if (!cita) return;
-    setLoadingSlots(true);
-    setSlots([]);
-    try {
-      const resp = await getDisponibilidad({
-        veterinario_id: cita.veterinario,       // es el id de usuario vet
-        fecha: fechaSlot,
-        duracion: cita.duracion_min || 30,      // si no existe, usamos 30
-        box: cita.box || "",
-      });
+  // cuando cambia cliente → recarga mascotas
+  useEffect(() => {
+    cargarMascotas(filtros.clienteId);
+  }, [filtros.clienteId]);
 
-      setSlots(resp.data?.slots || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingSlots(false);
+  // para mostrar un “subtítulo” de periodo
+  const rangoLabel = useMemo(() => {
+    if (!filtros.desde && !filtros.hasta) return "Sin filtro de fechas";
+    if (filtros.desde && filtros.hasta) {
+      return `Entre ${dayjs(filtros.desde).format("DD-MM-YYYY")} y ${dayjs(
+        filtros.hasta
+      ).format("DD-MM-YYYY")}`;
     }
-  };
-
-  // --- Abrir modal de reprogramación ---
-  const abrirReprogramar = async (cita) => {
-    setSelectedCita(cita);
-    const fechaActual = cita.inicio?.slice(0, 10) || fecha;
-    setNuevaFecha(fechaActual);
-    setSlotSeleccionado("");
-    setSlots([]);
-    setShowModal(true);
-    await cargarSlots(cita, fechaActual);
-  };
-
-  // --- Cuando cambia la fecha dentro del modal ---
-  const handleFechaModalChange = async (e) => {
-    const nueva = e.target.value;
-    setNuevaFecha(nueva);
-    setSlotSeleccionado("");
-    await cargarSlots(selectedCita, nueva);
-  };
-
-  // --- Confirmar reprogramación ---
-  const handleReprogramarSubmit = async (e) => {
-    e.preventDefault();
-    if (!selectedCita || !nuevaFecha || !slotSeleccionado) return;
-
-    const inicio = `${nuevaFecha}T${slotSeleccionado}`;
-
-    setSaving(true);
-    try {
-      await reprogramarCita(selectedCita.id, {
-        inicio,
-        duracion: selectedCita.duracion_min || 30,
-        box: selectedCita.box || "",
-      });
-      setShowModal(false);
-      setSelectedCita(null);
-      await loadCitas();
-    } catch (err) {
-      console.error(err);
-      alert("No se pudo reprogramar la cita. Revisa la disponibilidad.");
-    } finally {
-      setSaving(false);
+    if (filtros.desde) {
+      return `Desde ${dayjs(filtros.desde).format("DD-MM-YYYY")}`;
     }
-  };
+    return `Hasta ${dayjs(filtros.hasta).format("DD-MM-YYYY")}`;
+  }, [filtros.desde, filtros.hasta]);
+
+  // ordenar por fecha desc
+  const citasOrdenadas = useMemo(() => {
+    return [...citas].sort(
+      (a, b) => new Date(b.inicio).getTime() - new Date(a.inicio).getTime()
+    );
+  }, [citas]);
 
   return (
     <LayoutVet>
-      <div className="space-y-6">
-        {/* Encabezado */}
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              Vetyon · Veterinario
-            </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-              Citas y estadísticas
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Revisa tus citas del día, reprograma horarios y gestiona la agenda
-              médica digital en tiempo real.
-            </p>
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Título */}
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+            <CalendarDays className="w-6 h-6 text-sky-600" />
+            Citas y estadísticas
+          </h1>
+          <p className="text-sm text-slate-500">
+            Revisa el <span className="font-semibold">historial de reservas</span>{" "}
+            filtrando por cliente, mascota, estado y rango de fechas.
+          </p>
+        </header>
+
+        {/* Filtros */}
+        <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-500" />
+              Filtros de búsqueda
+            </h2>
+            <span className="text-xs text-slate-500">{rangoLabel}</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-700">
-              Fecha:
-            </label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-            />
-            <button
-              onClick={loadCitas}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Actualizar
-            </button>
+          <div className="grid md:grid-cols-4 gap-4">
+            {/* Cliente */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                <Users className="w-4 h-4 text-sky-500" />
+                Cliente
+              </label>
+              <select
+                name="clienteId"
+                value={filtros.clienteId}
+                onChange={handleChangeFiltro}
+                className="border border-slate-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                <option value="">Todos</option>
+                {clientes.map((cli) => (
+                  <option key={cli.id} value={cli.id}>
+                    {cli.nombre || `Cliente #${cli.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Mascota */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                <Dog className="w-4 h-4 text-emerald-500" />
+                Mascota
+              </label>
+              <select
+                name="mascotaId"
+                value={filtros.mascotaId}
+                onChange={handleChangeFiltro}
+                className="border border-slate-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+                disabled={!filtros.clienteId}
+              >
+                <option value="">
+                  {filtros.clienteId ? "Todas" : "Selecciona un cliente primero"}
+                </option>
+                {mascotas.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Estado */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">
+                Estado de la cita
+              </label>
+              <select
+                name="estado"
+                value={filtros.estado}
+                onChange={handleChangeFiltro}
+                className="border border-slate-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400"
+              >
+                {ESTADOS.map((e) => (
+                  <option key={e.value} value={e.value}>
+                    {e.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Fechas */}
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-slate-600">
+                    Desde
+                  </label>
+                  <input
+                    type="date"
+                    name="desde"
+                    value={filtros.desde}
+                    onChange={handleChangeFiltro}
+                    className="border border-slate-200 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-slate-600">
+                    Hasta
+                  </label>
+                  <input
+                    type="date"
+                    name="hasta"
+                    value={filtros.hasta}
+                    onChange={handleChangeFiltro}
+                    className="border border-slate-200 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-sky-400"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={cargarCitas}
+                disabled={loading}
+                className="mt-auto self-end px-4 py-1.5 text-xs font-medium rounded-md bg-sky-600 text-white hover:bg-sky-700 shadow-sm disabled:opacity-60"
+              >
+                {loading ? "Buscando..." : "Aplicar filtros"}
+              </button>
+            </div>
           </div>
         </section>
 
-        {/* Mensajes de estado */}
         {error && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            <AlertCircle className="h-4 w-4" />
-            <span>{error}</span>
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-md">
+            {error}
           </div>
         )}
 
-        {/* Lista de citas */}
-        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-5 w-5 text-sky-600" />
-              <h2 className="text-sm font-semibold text-slate-900">
-                Citas del día
-              </h2>
-            </div>
-            <p className="text-xs text-slate-500">
-              {dayjs(fecha).format("dddd DD [de] MMMM YYYY")}
-            </p>
-          </div>
+        {/* LISTA / HISTORIAL */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-slate-800">
+            Historial de reservas ({citasOrdenadas.length})
+          </h2>
 
-          {loading ? (
-            <p className="text-sm text-slate-500">Cargando citas...</p>
-          ) : citas.length === 0 ? (
+          {citasOrdenadas.length === 0 ? (
             <p className="text-sm text-slate-500">
-              No hay citas registradas para esta fecha.
+              No se encontraron citas con los filtros seleccionados.
             </p>
           ) : (
-            <div className="space-y-3">
-              {citas.map((cita) => (
-                <div
-                  key={cita.id}
-                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-slate-200 px-3 py-3"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex flex-col items-center text-slate-500 mt-0.5">
-                      <Clock className="h-4 w-4 mb-1" />
-                      <span className="text-xs font-medium">
-                        {cita.inicio
-                          ? dayjs(cita.inicio).format("HH:mm")
-                          : "--:--"}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
-                          <PawPrint className="h-3 w-3" />
-                          Mascota #{cita.mascota ?? "—"}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
-                          <User className="h-3 w-3" />
-                          Cliente #{cita.cliente ?? "—"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600">
-                        Estado:{" "}
-                        <span className="font-semibold capitalize">
-                          {cita.estado}
-                        </span>{" "}
-                        · Box:{" "}
-                        <span className="font-mono text-[11px]">
-                          {cita.box || "N/A"}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 md:justify-end">
-                    <button
-                      onClick={() => abrirReprogramar(cita)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      Reprogramar
-                    </button>
-                  </div>
-                </div>
+            <div className="space-y-2">
+              {citasOrdenadas.map((cita) => (
+                <CitaCard key={cita.id} cita={cita} />
               ))}
             </div>
           )}
         </section>
+      </div>
+    </LayoutVet>
+  );
+}
 
-        {/* Modal simple para reprogramar */}
-        {showModal && selectedCita && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-5">
-              <h3 className="text-base font-semibold text-slate-900 mb-3">
-                Reprogramar cita #{selectedCita.id}
-              </h3>
+function CitaCard({ cita }) {
+  const inicio = dayjs(cita.inicio);
+  const fecha = inicio.format("DD-MM-YYYY");
+  const hora = inicio.format("HH:mm");
 
-              <form onSubmit={handleReprogramarSubmit} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-700">
-                    Nueva fecha
-                  </label>
-                  <input
-                    type="date"
-                    value={nuevaFecha}
-                    onChange={handleFechaModalChange}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  />
-                </div>
+  const clienteNombre =
+  cita.cliente_nombre && cita.cliente_nombre.trim()
+    ? cita.cliente_nombre
+    : "Sin cliente";
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-700">
-                    Horario disponible
-                  </label>
+  const mascotaNombre = cita.mascota_nombre || cita.mascota?.nombre || "-";
 
-                  {loadingSlots ? (
-                    <p className="text-xs text-slate-500">
-                      Cargando horarios disponibles...
-                    </p>
-                  ) : slots.length === 0 ? (
-                    <p className="text-xs text-slate-500">
-                      No hay horarios disponibles para esta fecha.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto">
-                      {slots.map((h) => (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => setSlotSeleccionado(h)}
-                          className={
-                            "text-xs border rounded-lg px-2 py-1 text-center " +
-                            (slotSeleccionado === h
-                              ? "bg-sky-600 text-white border-sky-600"
-                              : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
-                          }
-                        >
-                          {h}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+  const estadoLabel = (() => {
+    switch (cita.estado) {
+      case "pendiente":
+        return { text: "Pendiente", cls: "bg-slate-100 text-slate-700" };
+      case "confirmada":
+        return { text: "Confirmada", cls: "bg-sky-100 text-sky-700" };
+      case "atendida":
+        return { text: "Atendida", cls: "bg-emerald-100 text-emerald-700" };
+      case "no_asistida":
+        return { text: "No asistió", cls: "bg-amber-100 text-amber-700" };
+      case "cancelada":
+        return { text: "Cancelada", cls: "bg-rose-100 text-rose-700" };
+      default:
+        return { text: cita.estado || "—", cls: "bg-slate-100 text-slate-700" };
+    }
+  })();
 
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setSelectedCita(null);
-                    }}
-                    className="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!slotSeleccionado || saving}
-                    className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed hover:bg-sky-700"
-                  >
-                    {saving ? "Guardando..." : "Confirmar cambio"}
-                  </button>
-                </div>
-              </form>
-            </div>
+  return (
+    <article className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-slate-500">
+          {fecha} · {hora} hrs
+          {cita.box ? ` · Box: ${cita.box}` : ""}
+        </div>
+        <div className="text-sm font-semibold text-slate-900">
+          {mascotaNombre}
+        </div>
+        <div className="text-xs text-slate-500">{clienteNombre}</div>
+        {cita.motivo && (
+          <div className="text-xs text-slate-500 mt-1">
+            Motivo: <span className="font-medium">{cita.motivo}</span>
           </div>
         )}
       </div>
-    </LayoutVet>
+
+      <div className="flex items-center gap-2 md:flex-col md:items-end">
+        <span
+          className={`px-2 py-1 rounded-full text-xs font-semibold ${estadoLabel.cls}`}
+        >
+          {estadoLabel.text}
+        </span>
+      </div>
+    </article>
   );
 }

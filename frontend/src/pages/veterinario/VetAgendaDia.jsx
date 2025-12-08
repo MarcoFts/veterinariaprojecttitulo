@@ -21,7 +21,7 @@ dayjs.locale("es");
 
 const todayStr = () => dayjs().format("YYYY-MM-DD");
 
-// suma minutos a "HH:MM" y devuelve "HH:MM"
+// Suma minutos a "HH:MM" y devuelve "HH:MM"
 const sumarMinutos = (horaStr, minutos) => {
   const [h, m] = horaStr.split(":").map(Number);
   const d = new Date();
@@ -159,7 +159,7 @@ export default function VetAgendaDia() {
     if (!ok) return;
 
     try {
-      const res = await atenderCita(slot.citaId); // PATCH /citas/:id/atender/
+      const res = await atenderCita(slot.citaId);
       const nuevoEstado = res?.data?.estado || "atendida";
 
       setSlots((prev) =>
@@ -182,7 +182,7 @@ export default function VetAgendaDia() {
     if (!ok) return;
 
     try {
-      const res = await marcarNoAsistida(slot.citaId); // PATCH /citas/:id/no_asistio/
+      const res = await marcarNoAsistida(slot.citaId);
       const nuevoEstado = res?.data?.estado || "no_asistida";
 
       setSlots((prev) =>
@@ -197,7 +197,7 @@ export default function VetAgendaDia() {
     }
   };
 
-  // 1) obtener perfil para saber vetId
+  // obtener perfil para saber vetId
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -211,7 +211,7 @@ export default function VetAgendaDia() {
     fetchUser();
   }, []);
 
-  // 1.5) cargar clientes para poder resolver nombre del dueño
+  // cargar clientes para poder resolver nombre del dueño
   useEffect(() => {
     const fetchClientes = async () => {
       try {
@@ -235,7 +235,7 @@ export default function VetAgendaDia() {
     fetchClientes();
   }, []);
 
-  // 2) cargar agenda de la semana (7 días) desde backend
+  // cargar agenda de la semana (7 días) desde backend
   useEffect(() => {
     if (!vetId) return;
 
@@ -404,6 +404,7 @@ export default function VetAgendaDia() {
     fetchAgendaSemana();
   }, [vetId, weekOffset, reloadAgenda, clientesMap]);
 
+  // Actualiza el slot localmente al asignar una nueva cita y fuerza recarga desde backend
   const handleAsignarConfirm = (payload) => {
     setSlots((prev) =>
       prev.map((s) =>
@@ -416,6 +417,7 @@ export default function VetAgendaDia() {
               mascota: payload.mascota_nombre || s.mascota,
               motivo: payload.motivo || s.motivo,
               box: payload.box || s.box,
+              citaId: payload.cita_id || s.citaId,
             }
           : s
       )
@@ -425,7 +427,6 @@ export default function VetAgendaDia() {
   };
 
   const getEstadoChip = (slot) => {
-    // Cancelada primero
     if (slot.estado === "cancelada") {
       return (
         <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-[1px] text-[9px] font-medium text-rose-700">
@@ -434,7 +435,6 @@ export default function VetAgendaDia() {
       );
     }
 
-    // Estados de asistencia
     if (slot.estadoCita === "atendida") {
       return (
         <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
@@ -451,7 +451,6 @@ export default function VetAgendaDia() {
       );
     }
 
-    // Confirmada
     if (slot.estadoCita === "confirmada") {
       return (
         <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-[1px] text-[9px] font-medium text-sky-700">
@@ -460,7 +459,6 @@ export default function VetAgendaDia() {
       );
     }
 
-    // Libre
     if (slot.estado === "libre") {
       return (
         <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
@@ -469,7 +467,6 @@ export default function VetAgendaDia() {
       );
     }
 
-    // Por defecto pendiente
     return (
       <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
         Pendiente
@@ -713,7 +710,6 @@ export default function VetAgendaDia() {
                                         "Sin motivo registrado"}
                                     </p>
 
-                                    {/* estado de asistencia opcional */}
                                     {slot.estadoCita === "atendida" && (
                                       <p className="text-[9px] text-emerald-700 font-semibold">
                                         Estado: Atendida
@@ -772,6 +768,8 @@ export default function VetAgendaDia() {
                 : s
             )
           );
+          // Forzamos recarga desde backend para mantener todo consistente
+          setReloadAgenda((n) => n + 1);
         }}
       />
 
@@ -794,6 +792,7 @@ export default function VetAgendaDia() {
               id: slot.citaId,
               inicio: `${slot.fecha}T${slot.horaInicio}`,
               box: slot.box || "",
+              duracion: slot.duracion || 30,
             });
           }}
           onCancelar={() => {
@@ -898,10 +897,8 @@ function ModalAccionesCita({
   const yaMarcadaAsistencia =
     slot.estadoCita === "atendida" || slot.estadoCita === "no_asistida";
 
-  // botones de asistencia solo si no está cancelada ni ya marcada
   const mostrarBotonesAsistencia = !estaCancelada && !yaMarcadaAsistencia;
 
-  // botón confirmar solo si está pendiente
   const mostrarBotonConfirmar =
     !estaCancelada &&
     slot.estadoCita !== "confirmada" &&

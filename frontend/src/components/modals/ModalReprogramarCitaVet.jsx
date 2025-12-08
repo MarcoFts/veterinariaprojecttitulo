@@ -15,12 +15,11 @@ dayjs.locale("es");
 
 export default function ModalReprogramarCita({
   open,
-  cita,          // { id, inicio, box, duracion? }
-  vetId,         // id del veterinario (lo pasaremos desde VetAgendaDia)
+  cita,          // { id, inicio, box, duracion }
+  vetId,         // id del veterinario
   onClose,
   onConfirm,     // callback para refrescar estado en la vista padre
 }) {
-  // ---- state y hooks (SIEMPRE se ejecutan, nunca dentro de if) ----
   const [selectedDate, setSelectedDate] = useState("");
   const [weekOffset, setWeekOffset] = useState(0);
   const [slots, setSlots] = useState([]);
@@ -38,7 +37,6 @@ export default function ModalReprogramarCita({
     setSelectedHour("");
     setError("");
 
-    // alineamos el weekOffset para que el calendario quede cerca de la fecha
     const diffDays = dayjs(base).diff(dayjs().startOf("day"), "day");
     const aligned = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
     setWeekOffset(aligned);
@@ -85,12 +83,14 @@ export default function ModalReprogramarCita({
           veterinario_id: vetId,
           fecha: selectedDate,
           duracion: cita?.duracion || 30,
-          box: "", // sin filtro por box
+          box: "",
         });
         setSlots(resp.data?.slots || []);
       } catch (err) {
         console.error("Error cargando disponibilidad:", err);
-        setError("No hay horarios disponibles o no se pudo cargar la disponibilidad.");
+        setError(
+          "No hay horarios disponibles o no se pudo cargar la disponibilidad."
+        );
       } finally {
         setLoadingSlots(false);
       }
@@ -115,24 +115,36 @@ export default function ModalReprogramarCita({
         box: cita.box || null,
       });
 
-      // avisamos al padre
-      onConfirm &&
+      if (onConfirm) {
         onConfirm({
           id: cita.id,
           nueva_fecha: selectedDate,
           nueva_hora: selectedHour,
         });
+      }
 
       onClose && onClose();
     } catch (err) {
       console.error("Error al reprogramar cita:", err);
-      setError("No se pudo reprogramar la cita. Revisa la disponibilidad.");
+      const data = err?.response?.data;
+      let msg = "No se pudo reprogramar la cita. Revisa la disponibilidad.";
+
+      if (data) {
+        if (typeof data === "string") {
+          msg = data;
+        } else if (Array.isArray(data.non_field_errors) && data.non_field_errors[0]) {
+          msg = data.non_field_errors[0];
+        } else if (typeof data.detail === "string") {
+          msg = data.detail;
+        }
+      }
+
+      setError(msg);
     } finally {
       setSaving(false);
     }
   };
 
-  // IMPORTANTE: los hooks ya se ejecutaron; AHORA sí podemos decidir no renderizar
   if (!open || !cita) return null;
 
   return (

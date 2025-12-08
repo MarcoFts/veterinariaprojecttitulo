@@ -18,6 +18,8 @@ from .views import (
     MotivoConsultaListCreateAPIView,
     ReporteAgendaView,
     ReporteInventarioView,
+    UpdateVetProfileView,
+    ClienteProfileView,
 )
 
 # Vistas de autenticación
@@ -54,8 +56,12 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="me"),
     path("api/auth/me/update/", UpdateVetProfileView.as_view(), name="update_vet_profile"),
-
-
+    # Perfil cliente
+    path(
+        "api/auth/cliente/profile/",
+        ClienteProfileView.as_view(),
+        name="cliente_profile",
+    ),
     # Recuperación de contraseña
     path("api/auth/password-reset/", PasswordResetRequestView.as_view(), name="password_reset"),
     path("api/auth/password-reset-confirm/<uidb64>/<token>/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),

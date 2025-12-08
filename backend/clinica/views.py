@@ -470,6 +470,7 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
 
 
 # ---------- CITAS ----------
+# ---------- CITAS ----------
 class CitaViewSet(viewsets.ModelViewSet):
     queryset = Cita.objects.all().select_related("cliente", "mascota", "veterinario")
     serializer_class = CitaSerializer
@@ -482,22 +483,21 @@ class CitaViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return qs.none()
 
-        # 1 Primero: si es veterinario (aunque tenga is_staff)
+        # --- VISIBILIDAD SEGÚN ROL ---
         if user_is_vet(user) and not user.is_superuser:
-            base_qs = qs.filter(veterinario=user)
-
-        # 2 Luego: admin / staff de la clínica
+            base_qs = qs.filter(veterinario=user)              # vet ve sus citas
         elif user.is_superuser or user.is_staff:
-            base_qs = qs
-
-        # 3 Cliente: solo sus propias citas
+            base_qs = qs                                      # staff ve todo
         elif user_is_client(user):
-            base_qs = qs.filter(cliente__user=user)
+            base_qs = qs.filter(cliente__user=user)           # cliente ve las suyas
         else:
             base_qs = qs.none()
 
-        # Filtro por fecha opcional ?fecha=YYYY-MM-DD
-        fecha_str = self.request.query_params.get("fecha")
+        params = self.request.query_params
+
+        # --- FILTROS OPCIONALES ---
+        # 1) Fecha exacta (modo "agenda del día")
+        fecha_str = params.get("fecha")
         if fecha_str:
             try:
                 fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
@@ -505,9 +505,259 @@ class CitaViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass
 
-        return base_qs.order_by("inicio")
+        # 2) Rango de fechas (historial)
+        desde_str = params.get("desde")
+        hasta_str = params.get("hasta")
 
-    # ---------- 🔥 PERFORM_CREATE ARREGLADO + ENVÍO DE CORREO ----------
+        if desde_str:
+            try:
+                d = datetime.strptime(desde_str, "%Y-%m-%d").date()
+                base_qs = base_qs.filter(inicio__date__gte=d)
+            except ValueError:
+                pass
+
+        if hasta_str:
+            try:
+                h = datetime.strptime(hasta_str, "%Y-%m-%d").date()
+                base_qs = base_qs.filter(inicio__date__lte=h)
+            except ValueError:
+                pass
+
+        # 3) Filtro por cliente / mascota
+        cliente_id = params.get("cliente") or params.get("cliente_id")
+        mascota_id = params.get("mascota") or params.get("mascota_id")
+
+        if cliente_id:
+            base_qs = base_qs.filter(cliente_id=cliente_id)
+
+        if mascota_id:
+            base_qs = base_qs.filter(mascota_id=mascota_id)
+
+        # 4) Filtro por estado
+        estado = params.get("estado")
+        if estado:
+            base_qs = base_qs.filter(estado=estado)
+
+        return base_qs.order_by("-inicio")
+
+    # ---------- CREAR CITA --------
+    def perform_create(self, serializer):
+        data = self.request.data
+
+        cliente_id = data.get("cliente_id")
+        mascota_id = data.get("mascota_id")
+        veterinario_id = data.get("veterinario_id")
+
+        if not cliente_id:
+            raise drf_serializers.ValidationError(
+                {"cliente_id": "El cliente es obligatorio."}
+            )
+
+        if not mascota_id:
+            raise drf_serializers.ValidationError(
+                {"mascota_id": "La mascota es obligatoria."}
+            )
+
+        if not veterinario_id:
+            raise drf_serializers.ValidationError(
+                {"veterinario_id": "El veterinario es obligatorio."}
+            )
+
+        cliente = get_object_or_404(Cliente, pk=cliente_id)
+        mascota = get_object_or_404(Mascota, pk=mascota_id)
+        veterinario = get_object_or_404(User, pk=veterinario_id)
+
+        # Validación: un cliente solo puede agendar con sus mascotas
+        if user_is_client(self.request.user):
+            if mascota.cliente_id != cliente.id:
+                raise PermissionDenied(
+                    "No puedes agendar con una mascota que no es tuya."
+                )
+
+        # OJO:
+        # - inicio, fin, box y motivo YA vienen en los datos y fueron validados
+        #   por el serializer (tipos, formato, etc.).
+        # - Aquí solo inyectamos las FK y el estado inicial.
+        cita = serializer.save(
+            cliente=cliente,
+            mascota=mascota,
+            veterinario=veterinario,
+            estado="pendiente",
+        )
+
+        # 📧 Enviar correo de creación de cita
+        enviar_notificacion_cita(cita, "creada")
+
+        return cita
+
+    # ---------- ACCIONES ----------
+    @action(detail=True, methods=["patch"])
+    def confirmar(self, request, pk=None):
+        cita = self.get_object()
+        u = request.user
+
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            if not cita.cliente or cita.cliente.user_id != u.id:
+                return Response({"detail": "No autorizado."}, status=403)
+
+        if cita.estado == "cancelada":
+            return Response(
+                {"detail": "No se puede confirmar una cita cancelada."},
+                status=400,
+            )
+
+        cita.estado = "confirmada"
+        cita.save(update_fields=["estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "confirmada")
+
+        return Response(self.get_serializer(cita).data)
+
+    @action(detail=True, methods=["patch"])
+    def cancelar(self, request, pk=None):
+        cita = self.get_object()
+        u = request.user
+
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            if not cita.cliente or cita.cliente.user_id != u.id:
+                return Response({"detail": "No autorizado."}, status=403)
+
+        if cita.estado == "cancelada":
+            return Response(
+                {"detail": "La cita ya está cancelada."},
+                status=400,
+            )
+
+        cita.estado = "cancelada"
+        cita.save(update_fields=["estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "cancelada")
+
+        return Response(self.get_serializer(cita).data)
+
+    @action(detail=True, methods=["patch"])
+    def no_asistio(self, request, pk=None):
+        cita = self.get_object()
+        u = request.user
+
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            return Response({"detail": "No autorizado."}, status=403)
+
+        if cita.estado == "cancelada":
+            return Response(
+                {"detail": "No corresponde marcar no asistida una cita cancelada."},
+                status=400,
+            )
+
+        cita.estado = "no_asistida"
+        cita.save(update_fields=["estado"])
+
+        return Response(self.get_serializer(cita).data)
+
+    @action(detail=True, methods=["patch"])
+    def reprogramar(self, request, pk=None):
+        """
+        Reprograma la cita usando las MISMAS validaciones del serializer:
+        - horario del veterinario
+        - solapamiento con otras citas
+        - bloqueos de agenda
+        """
+        cita = self.get_object()
+        u = request.user
+
+        # Permisos: cliente dueño de la cita o equipo vet
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            if not cita.cliente or cita.cliente.user_id != u.id:
+                return Response({"detail": "No autorizado."}, status=403)
+
+        inicio_str = request.data.get("inicio")
+        duracion = request.data.get("duracion")
+        nuevo_box = request.data.get("box") or cita.box
+
+        if not inicio_str:
+            return Response(
+                {"detail": "Debes enviar 'inicio' en formato ISO."},
+                status=400,
+            )
+
+        try:
+            nuevo_inicio = datetime.fromisoformat(inicio_str)
+        except ValueError:
+            return Response(
+                {"detail": "Formato de 'inicio' inválido."},
+                status=400,
+            )
+
+        # Normalizar a aware en la zona horaria del proyecto
+        if timezone.is_naive(nuevo_inicio):
+            nuevo_inicio = timezone.make_aware(
+                nuevo_inicio, timezone.get_current_timezone()
+            )
+        else:
+            nuevo_inicio = nuevo_inicio.astimezone(
+                timezone.get_current_timezone()
+            )
+
+        # Duración en minutos
+        if duracion is None:
+            duracion_min = int(
+                (cita.fin - cita.inicio).total_seconds() // 60
+            )
+        else:
+            try:
+                duracion_min = int(duracion)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "La duración debe ser un número entero en minutos."},
+                    status=400,
+                )
+
+        nuevo_fin = nuevo_inicio + timedelta(minutes=duracion_min)
+
+        # Usamos el serializer para que haga TODAS las validaciones de agenda
+        partial_data = {
+            "inicio": nuevo_inicio,
+            "fin": nuevo_fin,
+            "box": nuevo_box,
+        }
+
+        serializer = self.get_serializer(
+            cita, data=partial_data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        cita = serializer.save()
+
+        # Si estaba confirmada, la dejamos pendiente nuevamente
+        if cita.estado == "confirmada":
+            cita.estado = "pendiente"
+            cita.save(update_fields=["estado"])
+
+        # 📧 Enviar correo
+        enviar_notificacion_cita(cita, "reprogramada")
+
+        return Response(self.get_serializer(cita).data)
+
+    @action(detail=True, methods=["patch"])
+    def atender(self, request, pk=None):
+        cita = self.get_object()
+        u = request.user
+
+        if not (user_is_vet(u) or u.is_staff or u.is_superuser):
+            return Response({"detail": "No autorizado."}, status=403)
+
+        if cita.estado in ["cancelada", "no_asistida"]:
+            return Response(
+                {"detail": "No se puede marcar como atendida."},
+                status=400,
+            )
+
+        cita.estado = "atendida"
+        cita.save(update_fields=["estado"])
+        return Response(self.get_serializer(cita).data)
+
+    # ---------- PERFORM_CREATE ARREGLADO + ENVÍO DE CORREO ----------
     def perform_create(self, serializer):
         data = self.request.data
 
@@ -988,87 +1238,45 @@ def disponibilidad(request):
 
 # ---------- REGISTRO CLÍNICO ----------
 class RegistroClinicoViewSet(viewsets.ModelViewSet):
-    queryset = RegistroClinico.objects.all().order_by("-fecha")
     serializer_class = RegistroClinicoSerializer
+    permission_classes = [IsAuthenticated]
 
-    def create(self, request, *args, **kwargs):
+    def get_queryset(self):
         """
-        Crea un registro clínico y, si vienen items_tratamiento,
-        crea RegistroClinicoProducto y descuenta stock.
+        - Por defecto trae registros ordenados por fecha.
+        - Si viene ?mascota=ID o ?mascota_id=ID, filtra por esa mascota.
+        - Si es cliente normal, solo ve registros de SUS mascotas.
+        - Veterinarios / staff / superuser ven todo (o filtrado por query param).
         """
-        data = request.data.copy()
-        items_data = data.pop("items_tratamiento", [])
+        qs = (
+            RegistroClinico.objects
+            .select_related("mascota", "cita", "veterinario")
+            .order_by("-fecha", "-id")
+        )
 
-        # A veces DRF entrega esto como string si viene raro; nos aseguramos:
-        if isinstance(items_data, str):
-            import json
-            try:
-                items_data = json.loads(items_data)
-            except Exception:
-                items_data = []
+        u = self.request.user
+        if not u.is_authenticated:
+            return RegistroClinico.objects.none()
 
-        # Creamos el registro clínico normal
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        registro = serializer.save()
+        # --- filtro por mascota (para la ficha clínica) ---
+        mascota_id = (
+            self.request.query_params.get("mascota")
+            or self.request.query_params.get("mascota_id")
+        )
+        if mascota_id:
+            qs = qs.filter(mascota_id=mascota_id)
 
-        errores_items = []
+        # --- control de acceso por rol ---
+        es_vet = (
+            getattr(u, "is_veterinario", False)
+            or u.groups.filter(name__iexact="veterinarios").exists()
+        )
 
-        # Procesar items de tratamiento (productos usados)
-        for idx, item in enumerate(items_data):
-            try:
-                producto_id = item.get("producto")
-                tipo = item.get("tipo", "tratamiento")
-                cantidad = int(item.get("cantidad", 0))
+        # Clientes normales: solo registros de sus propias mascotas
+        if hasattr(u, "cliente") and not (es_vet or u.is_staff or u.is_superuser):
+            qs = qs.filter(mascota__cliente=u.cliente)
 
-                if not producto_id or cantidad <= 0:
-                    continue
-
-                try:
-                    producto = Producto.objects.get(pk=producto_id)
-                except Producto.DoesNotExist:
-                    errores_items.append(
-                        f"Ítem {idx+1}: producto {producto_id} no existe."
-                    )
-                    continue
-
-                # Validar stock
-                if producto.stock < cantidad:
-                    errores_items.append(
-                        f"Stock insuficiente para {producto.nombre} (disponible: {producto.stock}, solicitado: {cantidad})."
-                    )
-                    continue
-
-                # Crear RegistroClinicoProducto
-                RegistroClinicoProducto.objects.create(
-                    registro=registro,
-                    producto=producto,
-                    cantidad=cantidad,
-                    tipo=tipo,
-                )
-
-                # Descontar stock
-                producto.stock -= cantidad
-                producto.save()
-
-            except Exception as e:
-                errores_items.append(f"Error en ítem {idx+1}: {str(e)}")
-
-        headers = self.get_success_headers(serializer.data)
-        respuesta = self.get_serializer(registro).data
-
-        if errores_items:
-            # Devolvemos el registro creado, pero avisando errores de algunos ítems
-            return Response(
-                {
-                    "registro": respuesta,
-                    "errores_items_tratamiento": errores_items,
-                },
-                status=status.HTTP_201_CREATED,
-                headers=headers,
-            )
-
-        return Response(respuesta, status=status.HTTP_201_CREATED, headers=headers)
+        return qs
 
 # ---------- MOTIVOS DE CONSULTA ----------
 MOTIVOS_CONSULTA_OPCIONES = [
@@ -1195,5 +1403,91 @@ class UpdateVetProfileView(APIView):
 
         return Response({"detail": "Perfil actualizado correctamente."}, status=200)
 
+# ---------- PERFIL CLIENTE ----------
+class ClienteProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        u = request.user
+        cliente = getattr(u, "cliente", None)
+
+        if not cliente:
+            return Response(
+                {"detail": "Tu usuario no tiene ficha de cliente."},
+                status=400,
+            )
+
+        data = {
+            "first_name": u.first_name or "",
+            "last_name": u.last_name or "",
+            "email": u.email or "",
+            "telefono": cliente.telefono or "",
+            "direccion": cliente.direccion or "",
+            "rut_dni": cliente.rut_dni or "",
+            "acepta_comunicaciones": cliente.acepta_comunicaciones,
+        }
+        return Response(data, status=200)
+
+    def put(self, request):
+        u = request.user
+        cliente = getattr(u, "cliente", None)
+
+        if not cliente:
+            return Response(
+                {"detail": "Tu usuario no tiene ficha de cliente."},
+                status=400,
+            )
+
+        first_name = (request.data.get("first_name") or "").strip()
+        last_name = (request.data.get("last_name") or "").strip()
+        email = (request.data.get("email") or "").strip().lower()
+
+        telefono = (request.data.get("telefono") or "").strip()
+        direccion = (request.data.get("direccion") or "").strip()
+        rut_dni = (request.data.get("rut_dni") or "").strip()
+        acepta_comunicaciones = bool(
+            request.data.get("acepta_comunicaciones", cliente.acepta_comunicaciones)
+        )
+
+        errors = {}
+
+        if not first_name:
+            errors["first_name"] = "El nombre es obligatorio."
+        if not last_name:
+            errors["last_name"] = "El apellido es obligatorio."
+        if not email:
+            errors["email"] = "El correo es obligatorio."
+
+        # correo único (excluyendo al propio usuario)
+        if email and User.objects.filter(email=email).exclude(id=u.id).exists():
+            errors["email"] = "Este correo ya está registrado por otro usuario."
+
+        if errors:
+            return Response(errors, status=400)
+
+        # Actualizar usuario
+        u.first_name = first_name
+        u.last_name = last_name
+        u.email = email
+        u.username = email  # mantenemos username = email
+        u.save()
+
+        # Actualizar ficha cliente
+        cliente.telefono = telefono
+        cliente.direccion = direccion
+        cliente.rut_dni = rut_dni
+        cliente.acepta_comunicaciones = acepta_comunicaciones
+        cliente.save()
+
+        data = {
+            "first_name": u.first_name,
+            "last_name": u.last_name,
+            "email": u.email,
+            "telefono": cliente.telefono,
+            "direccion": cliente.direccion,
+            "rut_dni": cliente.rut_dni,
+            "acepta_comunicaciones": cliente.acepta_comunicaciones,
+        }
+        return Response(data, status=200)
 
 

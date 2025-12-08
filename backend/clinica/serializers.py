@@ -261,6 +261,8 @@ class CitaSerializer(serializers.ModelSerializer):
 
     veterinario_nombre = serializers.SerializerMethodField()
     mascota_nombre = serializers.SerializerMethodField()
+    cliente_nombre = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Cita
@@ -272,6 +274,7 @@ class CitaSerializer(serializers.ModelSerializer):
             "mascota",
             "veterinario",
             "veterinario_nombre",
+            "cliente_nombre",
             "mascota_nombre",
             "motivo",
             "inicio",
@@ -290,8 +293,121 @@ class CitaSerializer(serializers.ModelSerializer):
     def get_mascota_nombre(self, obj):
         return obj.mascota.nombre if obj.mascota else ""
 
+    def get_cliente_nombre(self, obj):
+        cli = getattr(obj, "cliente", None)
+        if not cli:
+            return ""
+        u = getattr(cli, "user", None)
+        if not u:
+            return f"Cliente #{cli.pk}"
+        full = f"{u.first_name} {u.last_name}".strip()
+        return full or u.email or u.username
+
+    def validate(self, attrs):
+        """
+        Validaciones de negocio para la agenda:
+        - inicio < fin
+        - dentro del horario de atención del veterinario
+        - sin solaparse con otras citas activas
+        - sin caer en bloqueos de agenda
+        """
+        instance = getattr(self, "instance", None)
+
+        # Valores nuevos o, si no vienen (en update parcial), desde la instancia
+        inicio = attrs.get("inicio") or getattr(instance, "inicio", None)
+        fin = attrs.get("fin") or getattr(instance, "fin", None)
+        veterinario = attrs.get("veterinario") or getattr(instance, "veterinario", None)
+        box = attrs.get("box") or getattr(instance, "box", None)
+
+        # Si falta info clave, dejamos que otras validaciones del serializer actúen
+        if not inicio or not fin:
+            return attrs
+
+        # 1) inicio < fin
+        if fin <= inicio:
+            raise serializers.ValidationError(
+                {"fin": "La hora de término debe ser mayor que la hora de inicio."}
+            )
+
+        # Si no tenemos veterinario aún (por ejemplo lo setea el ViewSet),
+        # no podemos validar horario ni solapamiento.
+        if not veterinario:
+            return attrs
+
+        # 2) Debe estar dentro del horario de atención del veterinario
+        #    HorarioAtencion: veterinario, dia_semana (0=lunes), inicio (time), fin (time)
+        dia_semana = inicio.weekday()  # 0=lunes ... 6=domingo
+        hora_inicio = inicio.time()
+        hora_fin = fin.time()
+
+        horarios = HorarioAtencion.objects.filter(
+            veterinario=veterinario,
+            dia_semana=dia_semana,
+        )
+
+        dentro_horario = False
+        for h in horarios:
+            if h.inicio <= hora_inicio and h.fin >= hora_fin:
+                dentro_horario = True
+                break
+
+        if not dentro_horario:
+            raise serializers.ValidationError(
+                "La cita está fuera del horario de atención definido para el veterinario."
+            )
+
+        # 3) No debe solaparse con otras citas activas del mismo veterinario
+        #    Consideramos activos: pendiente, confirmada, atendida
+        estados_activos = ["pendiente", "confirmada", "atendida"]
+
+        qs_citas = Cita.objects.filter(
+            veterinario=veterinario,
+            estado__in=estados_activos,
+            inicio__lt=fin,
+            fin__gt=inicio,
+        )
+
+        # Excluirse a sí misma en caso de update
+        if instance is not None:
+            qs_citas = qs_citas.exclude(pk=instance.pk)
+
+        if qs_citas.exists():
+            raise serializers.ValidationError(
+                "El veterinario ya tiene otra cita asignada en ese horario."
+            )
+
+        # (Opcional) control por box, si lo usas para salas físicas
+        if box:
+            qs_box = Cita.objects.filter(
+                box=box,
+                estado__in=estados_activos,
+                inicio__lt=fin,
+                fin__gt=inicio,
+            )
+            if instance is not None:
+                qs_box = qs_box.exclude(pk=instance.pk)
+
+            if qs_box.exists():
+                raise serializers.ValidationError(
+                    "El box seleccionado ya está ocupado en ese horario."
+                )
+
+        # 4) No debe caer en un bloqueo de agenda
+        bloqueos = BloqueoAgenda.objects.filter(
+            veterinario=veterinario,
+            inicio__lt=fin,
+            fin__gt=inicio,
+        )
+        if bloqueos.exists():
+            raise serializers.ValidationError(
+                "Existe un bloqueo de agenda en el horario seleccionado."
+            )
+
+        return attrs
+
     # ❌ BORRADO create() — ahora el ViewSet maneja todo
     
+
 class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
     producto_codigo = serializers.CharField(source="producto.codigo", read_only=True)
@@ -312,6 +428,7 @@ class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
 class RegistroClinicoSerializer(serializers.ModelSerializer):
     # para lectura (GET)
     items_tratamiento = RegistroClinicoProductoSerializer(many=True, read_only=True)
+    veterinario_nombre = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = RegistroClinico
@@ -328,19 +445,36 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
             "evolucion",
             "notas",
             "creado_en",
+            "veterinario",          # <- para que quede claro que existe la FK
+            "veterinario_nombre",   # solo lectura
             "items_tratamiento",
         ]
-        read_only_fields = ["veterinario", "veterinario_nombre"]
+        read_only_fields = ["veterinario", "veterinario_nombre", "fecha", "creado_en"]
 
+    # ---- helpers ----
     def get_veterinario_nombre(self, obj):
+        if not getattr(obj, "veterinario", None):
+            return None
         full = f"{obj.veterinario.first_name} {obj.veterinario.last_name}".strip()
         return full or obj.veterinario.email or obj.veterinario.username
+
+    def _user_is_vet(self, user):
+        """
+        Misma lógica que user_is_vet() de views.py,
+        pero local para evitar import circular.
+        """
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_veterinario", False):
+            return True
+        return user.groups.filter(name__iexact="veterinarios").exists()
 
     @transaction.atomic
     def create(self, validated_data):
         """
         - El veterinario se toma del usuario logueado.
-        - Si viene una cita asociada, la marca como 'completada'.
+        - Solo veterinarios / staff / superuser pueden crear.
+        - Si viene una cita asociada, la marca como 'atendida'.
         - Si vienen productos en items_tratamiento, se validan y se generan
           movimientos de inventario (salida).
         """
@@ -350,19 +484,19 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         if not user or not user.is_authenticated:
             raise serializers.ValidationError({"detail": "Usuario no autenticado."})
 
-        # Solo veterinario / staff pueden crear registros clínicos
-        if not (user.is_staff or getattr(user, "is_veterinario", False)):
+        # ---- PERMISOS: misma lógica que en views.user_is_vet ----
+        if not (self._user_is_vet(user) or user.is_staff or user.is_superuser):
             raise serializers.ValidationError(
                 {"detail": "No tienes permisos para crear registros clínicos."}
             )
 
-        # Asignar veterinario automáticamente
+        # Asignar veterinario automáticamente (FK al User)
         validated_data["veterinario"] = user
 
         # Guardar referencia a cita (si viene)
         cita = validated_data.get("cita", None)
 
-        # Leer items_tratamiento DESDE el request (puede venir como lista o string JSON)
+        # Leer items_tratamiento DESDE el request (puede venir como lista o JSON string)
         raw_items = request.data.get("items_tratamiento", [])
         if isinstance(raw_items, str):
             import json
@@ -386,7 +520,6 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 continue
 
             try:
-                # select_for_update para evitar condiciones de carrera
                 producto = Producto.objects.select_for_update().get(pk=producto_id)
             except Producto.DoesNotExist:
                 continue
@@ -424,7 +557,6 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 tipo=tipo,
             )
 
-            # Movimiento de inventario (SALIDA) -> ajusta stock en MovimientoInventario.save()
             MovimientoInventario.objects.create(
                 producto=producto,
                 tipo="salida",
@@ -432,18 +564,14 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 motivo=f"Uso en registro clínico #{registro.pk}",
             )
 
-        # Si había una cita asociada, marcarla como completada (si el modelo lo permite)
+        # Si había una cita asociada, marcarla como atendida
         if cita is not None:
             try:
-                from .models import Cita  # por si acaso
-
                 if isinstance(cita, Cita):
                     cita.estado = "atendida"
                     cita.save(update_fields=["estado"])
             except Exception:
-                # No rompemos la creación del registro si algo falla aquí
                 pass
-
 
         return registro
 
@@ -582,4 +710,3 @@ class MotivoConsultaSerializer(serializers.ModelSerializer):
         if request and request.user and request.user.is_authenticated:
             validated_data["creado_por"] = request.user
         return super().create(validated_data)
-

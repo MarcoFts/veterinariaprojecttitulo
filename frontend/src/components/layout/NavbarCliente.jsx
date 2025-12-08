@@ -1,3 +1,4 @@
+// src/components/layout/NavbarCliente.jsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import { Home, CalendarDays, PawPrint, UserCircle2 } from "lucide-react";
@@ -18,7 +19,7 @@ export default function NavbarCliente() {
 
   const menuRef = useRef(null);
 
-  // Cerrar al hacer clic fuera
+  // Cerrar menú al hacer clic fuera
   useEffect(() => {
     function handleClickOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -37,11 +38,14 @@ export default function NavbarCliente() {
     navigate("/login", { replace: true });
   };
 
+  const handleGoPerfil = () => {
+    setOpenUserMenu(false);
+    navigate("/cliente/perfil");
+  };
+
   return (
     <header className="z-[5] bg-white/70 border-b border-white/40 shadow-sm">
-
       <nav className="w-full px-4 py-3 flex items-center justify-between gap-4">
-
         {/* LOGO */}
         <Link to="/cliente/home" className="flex items-center gap-2">
           <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 flex items-center justify-center shadow-md">
@@ -77,7 +81,6 @@ export default function NavbarCliente() {
 
         {/* BOTÓN RESERVAR + USER */}
         <div className="flex items-center gap-3">
-
           {/* RESERVAR HORA */}
           <Link
             to="/cliente/agendar"
@@ -104,13 +107,13 @@ export default function NavbarCliente() {
             {openUserMenu && (
               <div className="absolute right-0 mt-2 w-full rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
                 <div className="py-1">
-
                   {/* PERFIL */}
                   <button
+                    type="button"
+                    onClick={handleGoPerfil}
                     className="w-full flex items-center justify-between px-4 py-2 text-slate-700 text-sm hover:bg-slate-50 transition"
                   >
                     Mi perfil
-                    <span className="text-[11px] text-slate-400">(futuro)</span>
                   </button>
 
                   <div className="h-px bg-slate-200 my-1" />
@@ -122,12 +125,10 @@ export default function NavbarCliente() {
                   >
                     Cerrar sesión
                   </button>
-
                 </div>
               </div>
             )}
           </div>
-
         </div>
       </nav>
     </header>

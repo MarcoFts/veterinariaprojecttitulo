@@ -255,4 +255,14 @@ export const atenderCita = (id) =>
 export const marcarNoAsistida = (id) =>
   api.patch(`/citas/${id}/no_asistio/`);
 
+// ---------- PERFIL CLIENTE ----------
+
+export function getClientePerfil() {
+  return api.get("/auth/cliente/profile/");
+}
+
+export function updateClientePerfil(payload) {
+  return api.put("/auth/cliente/profile/", payload);
+}
+
 export default api;

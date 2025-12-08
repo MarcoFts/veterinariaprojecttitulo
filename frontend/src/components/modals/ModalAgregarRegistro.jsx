@@ -10,6 +10,9 @@ import {
   Syringe,
 } from "lucide-react";
 
+// Valor especial para la opción "Otro" en selects de vacuna/antiparasitario
+const OPCION_OTRO = "otro";
+
 export default function ModalAgregarRegistro({
   open,
   onClose,
@@ -53,11 +56,11 @@ export default function ModalAgregarRegistro({
   });
 
   const [productos, setProductos] = useState([]);
-  const [itemsTratamiento, setItemsTratamiento] = useState([]); // lista de productos agregados
+  const [itemsTratamiento, setItemsTratamiento] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Cuando se abre el modal, refrescamos motivo y limpiamos errores
+  // Cuando se abre el modal, refresca motivo y limpia errores
   useEffect(() => {
     if (!open) return;
     setForm((prev) => ({
@@ -110,13 +113,24 @@ export default function ModalAgregarRegistro({
       setForm((prev) => ({
         ...prev,
         tratamiento_tipo: value,
-        tratamiento_producto: "", // obligamos a elegir un producto compatible
+        tratamiento_producto: "",
       }));
       return;
     }
 
-    // Si cambia el select de vacuna (desde inventario por lote)
+    // Select de vacuna desde inventario por lote, con opción "Otro"
     if (name === "vacuna_producto_id") {
+      // Si elige "Otro", se desconecta del inventario y deja escribir a mano
+      if (value === OPCION_OTRO) {
+        setForm((prev) => ({
+          ...prev,
+          vacuna_producto_id: OPCION_OTRO,
+          vacuna_tipo: "",
+          vacuna_marca: "",
+        }));
+        return;
+      }
+
       const prod = productosVacuna.find(
         (p) => String(p.id) === String(value)
       );
@@ -145,8 +159,18 @@ export default function ModalAgregarRegistro({
       return;
     }
 
-    // Si cambia el select de antiparasitario (desde inventario por lote)
+    // Select de antiparasitario desde inventario por lote, con opción "Otro"
     if (name === "anti_producto_id") {
+      if (value === OPCION_OTRO) {
+        setForm((prev) => ({
+          ...prev,
+          anti_producto_id: OPCION_OTRO,
+          anti_tipo: "",
+          anti_marca: "",
+        }));
+        return;
+      }
+
       const prod = productosAntiparasitario.find(
         (p) => String(p.id) === String(value)
       );
@@ -199,12 +223,10 @@ export default function ModalAgregarRegistro({
       },
     ]);
 
-    // limpiar inputs de producto
     setForm((prev) => ({
       ...prev,
       tratamiento_producto: "",
       tratamiento_cantidad: 1,
-      // mantenemos tratamiento_tipo
     }));
   };
 
@@ -216,8 +238,6 @@ export default function ModalAgregarRegistro({
     e.preventDefault();
     setLoading(true);
     setError("");
-
-    // ---- Armamos textos finales a partir de la UI "elegante" ----
 
     const motivoFinal = [
       form.tipo_consulta && `Tipo de consulta: ${form.tipo_consulta}`,
@@ -258,15 +278,17 @@ export default function ModalAgregarRegistro({
       .filter(Boolean)
       .join("\n");
 
-    // ---- Armamos items_tratamiento para el backend (stock) ----
     const items_tratamiento = itemsTratamiento.map((item) => ({
       producto: item.producto,
       cantidad: item.cantidad,
       tipo: item.tipo,
     }));
 
-    // Agregar automáticamente 1 dosis de la vacuna seleccionada (si hay)
-    if (form.vacuna_producto_id) {
+    // Agrega una dosis de la vacuna seleccionada SOLO si es un producto real
+    if (
+      form.vacuna_producto_id &&
+      form.vacuna_producto_id !== OPCION_OTRO
+    ) {
       const yaExiste = items_tratamiento.find(
         (it) =>
           String(it.producto) === String(form.vacuna_producto_id) &&
@@ -281,8 +303,11 @@ export default function ModalAgregarRegistro({
       }
     }
 
-    // Agregar automáticamente 1 dosis del antiparasitario seleccionado (si hay)
-    if (form.anti_producto_id) {
+    // Agrega una dosis del antiparasitario seleccionado SOLO si es producto real
+    if (
+      form.anti_producto_id &&
+      form.anti_producto_id !== OPCION_OTRO
+    ) {
       const yaExiste = items_tratamiento.find(
         (it) =>
           String(it.producto) === String(form.anti_producto_id) &&
@@ -308,7 +333,7 @@ export default function ModalAgregarRegistro({
         medicamentos: medicamentosFinal,
         evolucion: form.evolucion,
         notas: form.notas,
-        items_tratamiento, // importante para descontar stock
+        items_tratamiento,
       });
 
       if (onSuccess) {
@@ -349,7 +374,6 @@ export default function ModalAgregarRegistro({
     minute: "2-digit",
   });
 
-  // Según el tipo de uso, qué lista se usa en el select principal
   let productosParaSelect = [];
   if (form.tratamiento_tipo === "vacuna") {
     productosParaSelect = productosVacuna;
@@ -711,6 +735,7 @@ export default function ModalAgregarRegistro({
                           {p.nombre} {p.lote ? `(Lote ${p.lote})` : ""}
                         </option>
                       ))}
+                      <option value={OPCION_OTRO}>Otro (escribir manualmente)</option>
                     </select>
                   ) : (
                     <input
@@ -801,6 +826,7 @@ export default function ModalAgregarRegistro({
                           {p.nombre} {p.codigo ? `(${p.codigo})` : ""}
                         </option>
                       ))}
+                      <option value={OPCION_OTRO}>Otro (escribir manualmente)</option>
                     </select>
                   ) : (
                     <input
