@@ -58,6 +58,11 @@ def user_is_vet(user):
     return getattr(user, "is_veterinario", False) or user.groups.filter(
         name="veterinarios"
     ).exists()
+    
+def user_is_admin(user):
+    if not user or not user.is_authenticated:
+        return False
+    return user.is_staff or user.is_superuser
 
 
 def user_is_client(user):
@@ -66,6 +71,8 @@ def user_is_client(user):
     Asume que Cliente tiene OneToOneField(user, related_name='cliente').
     """
     return hasattr(user, "cliente")
+
+
 
 # ---------- REPORTES DE GESTIÓN ----------
 
@@ -370,6 +377,27 @@ class MascotaViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save(cliente=cliente)
+
+    def perform_destroy(self, instance):
+        """
+        ❌ No permitir eliminar mascota con citas activas.
+        """
+        citas_bloqueantes = instance.citas.filter(
+            estado__in=["pendiente", "confirmada", "atendida"]
+        )
+
+        if citas_bloqueantes.exists():
+            raise drf_serializers.ValidationError(
+                {
+                    "detail": (
+                        "No puedes eliminar esta mascota porque tiene "
+                        "citas pendientes, confirmadas o atendidas."
+                    )
+                }
+            )
+
+        instance.delete()
+
 
 
 # ---------- HORARIOS DE ATENCIÓN ----------
@@ -1011,21 +1039,51 @@ class ProductoViewSet(viewsets.ModelViewSet):
     serializer_class = ProductoSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        """
+        - Veterinario: solo LIST / RETRIEVE
+        - Administrador (is_staff / is_superuser): CRUD completo
+        - Cliente: sin acceso
+        """
+        user = self.request.user
+
+        # ADMIN → todo permitido
+        if user and (user.is_staff or user.is_superuser):
+            return [IsAuthenticated()]
+
+        # VETERINARIO → solo lectura
+        if hasattr(user, "veterinario"):
+            if self.action in ["list", "retrieve"]:
+                return [IsAuthenticated()]
+            raise PermissionDenied(
+                "Solo el administrador puede crear, editar o eliminar productos."
+            )
+
+        # CLIENTE → nada
+        raise PermissionDenied("No autorizado.")
+
 # ---------- INVENTARIO ----------
 class InventarioViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
     serializer_class = InventarioSerializer
     permission_classes = [IsAuthenticated]
 
     def list(self, request, *args, **kwargs):
+        user = request.user
+        if not (user_is_vet(user) or user_is_admin(user)):
+            raise PermissionDenied("No autorizado.")
+
         dias = int(request.query_params.get("dias", 30))
         productos = Producto.objects.all()
+
         stock_bajo = [p for p in productos if p.en_alerta_stock()]
         por_vencer = [p for p in productos if p.en_alerta_vencimiento(dias=dias)]
+
         data = {
             "stock_bajo": ProductoSerializer(stock_bajo, many=True).data,
             "por_vencer": ProductoSerializer(por_vencer, many=True).data,
         }
         return Response(data)
+
 
 # ---------- REGISTRO ----------
 class RegisterView(APIView):
@@ -1069,7 +1127,7 @@ class RegisterView(APIView):
         if errors:
             return Response(errors, status=400)
 
-        username = email  # 👈 así evitamos usernames duplicados
+        username = email  
 
         try:
             user = User.objects.create_user(
@@ -1120,6 +1178,7 @@ def me(request):
         "last_name": u.last_name,
         "is_vet": user_is_vet(u),
         "is_staff": u.is_staff,
+        "is_admin": user_is_admin(request.user),
         "cliente_id": cliente.id if cliente else None,
         "vet_profile": vet_data,
     })

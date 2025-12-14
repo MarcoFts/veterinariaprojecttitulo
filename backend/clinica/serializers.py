@@ -1,7 +1,15 @@
+# backend/clinica/serializers.py  
+from __future__ import annotations
+
+import re
+from datetime import date
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
-from django.shortcuts import get_object_or_404
+
 from .models import (
     Cliente,
     Mascota,
@@ -16,19 +24,90 @@ from .models import (
     Veterinario,
 )
 
-
 User = get_user_model()
 
+# =====================================================
+# Helpers (validaciones compartidas)
+# =====================================================
 
+RUT_RE = re.compile(r"^[0-9]+-[0-9Kk]$")
+PHONE_DIGITS_RE = re.compile(r"\D+")
+
+def normalizar_telefono_cl(value: str) -> str:
+    """Chile (móvil): 9 dígitos. Salida: '9 1234 5678'."""
+    v = (value or "").strip()
+    if not v:
+        raise serializers.ValidationError("Teléfono obligatorio. Ej: 9 1234 5678")
+    digits = PHONE_DIGITS_RE.sub("", v)
+    if digits.startswith("56") and len(digits) > 9:
+        digits = digits[-9:]
+    if len(digits) != 9 or digits[0] != "9":
+        raise serializers.ValidationError(
+            "Teléfono inválido. Debe tener 9 dígitos y empezar con 9. Ej: 9 1234 5678"
+        )
+    return f"{digits[0]} {digits[1:5]} {digits[5:]}"
+
+def rut_dv(num: str) -> str:
+    s = 0
+    mult = 2
+    for ch in reversed(num):
+        s += int(ch) * mult
+        mult = 2 if mult == 7 else mult + 1
+    r = 11 - (s % 11)
+    if r == 11:
+        return "0"
+    if r == 10:
+        return "K"
+    return str(r)
+
+def normalizar_y_validar_rut(value: str) -> str:
+    """Normaliza a '12345678-5' y valida dígito verificador."""
+    v = (value or "").strip()
+    if not v:
+        raise serializers.ValidationError("RUT obligatorio. Formato: 12.345.678-5")
+    v = v.replace(".", "").replace(" ", "")
+    if "-" not in v:
+        if len(v) < 2:
+            raise serializers.ValidationError("RUT inválido. Ej: 12.345.678-5")
+        v = f"{v[:-1]}-{v[-1]}"
+    v = v.upper()
+    if not RUT_RE.match(v):
+        raise serializers.ValidationError("RUT inválido. Ej: 12.345.678-5")
+    num, dv = v.split("-")
+    if not num.isdigit():
+        raise serializers.ValidationError("RUT inválido. Ej: 12.345.678-5")
+    dv_calc = rut_dv(num)
+    if dv != dv_calc:
+        raise serializers.ValidationError(f"RUT inválido (DV no coincide). Debe ser: {int(num)}-{dv_calc}")
+    return f"{int(num)}-{dv}"
+
+def validar_password_segura(value: str) -> str:
+    pwd = value or ""
+    if len(pwd) < 8:
+        raise serializers.ValidationError("La contraseña debe tener mínimo 8 caracteres.")
+    if re.search(r"\s", pwd):
+        raise serializers.ValidationError("La contraseña no puede contener espacios.")
+    if not re.search(r"[0-9]", pwd):
+        raise serializers.ValidationError("La contraseña debe incluir al menos 1 número.")
+    if not re.search(r"[^A-Za-z0-9]", pwd):
+        raise serializers.ValidationError("La contraseña debe incluir al menos 1 símbolo (ej: !@#$).")
+    if not re.search(r"[A-Za-z]", pwd):
+        raise serializers.ValidationError("La contraseña debe incluir letras.")
+    return pwd
+
+
+# =====================================================
 # ---------- Cliente / Mascota ----------
+# =====================================================
 
 class MascotaSerializer(serializers.ModelSerializer):
-    # Cambios IMPORTANTES → ahora microchip permite null y blank
     microchip = serializers.CharField(
         required=False,
         allow_blank=True,
         allow_null=True
     )
+
+
 
     dueno_nombre = serializers.SerializerMethodField()
     dueno_telefono = serializers.SerializerMethodField()
@@ -41,15 +120,26 @@ class MascotaSerializer(serializers.ModelSerializer):
         exclude = ("cliente",)
 
     # -------------------------
-    # NORMALIZACIÓN AUTOMÁTICA
+    # VALIDACIONES Y NORMALIZACIÓN
     # -------------------------
+
     def validate_nombre(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError(
+                "El nombre de la mascota es obligatorio."
+            )
         return value.strip().capitalize()
 
     def validate_especie(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError(
+                "Debes seleccionar una especie válida."
+            )
         return value.strip().capitalize()
 
     def validate_raza(self, value):
+        if value is None:
+            return value
         return value.strip().capitalize()
 
     def validate_microchip(self, value):
@@ -61,26 +151,72 @@ class MascotaSerializer(serializers.ModelSerializer):
         - null
         """
         if value in [None, "", " ", "null"]:
-            return None
+            return "No"
 
         v = value.strip().capitalize()
 
         if v not in ["Si", "No"]:
             raise serializers.ValidationError(
-                "El microchip debe ser 'Si', 'No' o vacío."
+                "El microchip solo puede ser 'Si' o 'No'."
             )
 
         return v
 
     def validate_fecha_nacimiento(self, value):
-        from datetime import date
-        if value > date.today():
-            raise serializers.ValidationError("La fecha no puede ser futura.")
+        if value is None:
+            return value
+
+        hoy = date.today()
+
+        # no futura
+        if value > hoy:
+            raise serializers.ValidationError(
+                "La fecha de nacimiento no puede ser futura."
+            )
+
+        # año irreal
+        if value.year < 1900:
+            raise serializers.ValidationError(
+                "La fecha de nacimiento ingresada no es válida."
+            )
+
+        # edad máxima razonable (100 años)
+        edad = hoy.year - value.year - (
+            (hoy.month, hoy.day) < (value.month, value.day)
+        )
+
+        if edad > 100:
+            raise serializers.ValidationError(
+                "La edad de la mascota no es válida."
+            )
+
         return value
+
+    def validate_peso_kg(self, value):
+        if value is None or value == "":
+            return None
+
+        try:
+            d = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            raise serializers.ValidationError("El peso ingresado no es válido.")
+
+        d = d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        if d <= 0:
+            raise serializers.ValidationError("El peso debe ser mayor a cero.")
+        if d > Decimal("200"):
+            raise serializers.ValidationError("El peso ingresado no es válido.")
+
+        return d
+
+    # -------------------------
+    # CAMPOS DEL DUEÑO
 
     # -------------------------
     # CAMPOS DEL DUEÑO
     # -------------------------
+
     def get_dueno_nombre(self, obj):
         cliente = getattr(obj, "cliente", None)
         if not cliente:
@@ -103,6 +239,9 @@ class MascotaSerializer(serializers.ModelSerializer):
         return self.get_dueno_nombre(obj)
 
 
+# =====================================================
+# ---------- Cliente ----------
+# =====================================================
 
 class ClienteSerializer(serializers.ModelSerializer):
     nombre = serializers.SerializerMethodField()
@@ -122,6 +261,18 @@ class ClienteSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["user", "mascotas", "nombre"]
 
+    def validate_telefono(self, value):
+        v = (value or "").strip()
+        if not v:
+            return v
+        return normalizar_telefono_cl(v)
+
+    def validate_rut_dni(self, value):
+        v = (value or "").strip()
+        if not v:
+            return v
+        return normalizar_y_validar_rut(v)
+
     def get_nombre(self, obj):
         u = getattr(obj, "user", None)
         if not u:
@@ -129,6 +280,10 @@ class ClienteSerializer(serializers.ModelSerializer):
         full = f"{u.first_name} {u.last_name}".strip()
         return full or u.email or u.username
 
+
+# =====================================================
+# ---------- Veterinario ----------
+# =====================================================
 
 class VeterinarioSerializer(serializers.ModelSerializer):
     nombre = serializers.SerializerMethodField()
@@ -140,7 +295,8 @@ class VeterinarioSerializer(serializers.ModelSerializer):
     def get_nombre(self, obj):
         full = f"{obj.first_name} {obj.last_name}".strip()
         return full or obj.email or obj.username
-    
+
+
 class VeterinarioModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Veterinario
@@ -158,22 +314,22 @@ class VeterinarioModelSerializer(serializers.ModelSerializer):
         ]
 
     def validate_telefono(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("El teléfono es obligatorio.")
-        return value
+        return normalizar_telefono_cl(value)
 
     def validate_rut_dni(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("El RUT / DNI es obligatorio.")
-        return value
+        return normalizar_y_validar_rut(value)
 
     def validate_especialidad(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("La especialidad es obligatoria.")
-        return value
+        if not value or not value.strip():
+            raise serializers.ValidationError(
+                "La especialidad es obligatoria."
+            )
+        return value.strip()
 
 
-# ---------- Registro ----------
+# =====================================================
+# ---------- Registro / Auth ----------
+# =====================================================
 
 class RegisterSerializer(serializers.Serializer):
     # Usuario
@@ -184,42 +340,62 @@ class RegisterSerializer(serializers.Serializer):
     password2 = serializers.CharField(write_only=True, min_length=8)
 
     # Cliente
-    telefono = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    direccion = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    rut_dni = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    acepta_comunicaciones = serializers.BooleanField(
-        required=False, default=False
-    )
+    telefono = serializers.CharField()
+    direccion = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    rut_dni = serializers.CharField()
+    acepta_comunicaciones = serializers.BooleanField(required=False, default=False)
 
     # Mascota opcional
     mascota_nombre = serializers.CharField(required=False, allow_blank=True)
     mascota_especie = serializers.CharField(required=False, allow_blank=True)
     mascota_raza = serializers.CharField(required=False, allow_blank=True)
 
+    # -------------------------
+    # Validaciones
+    # -------------------------
+
+    def validate_first_name(self, value):
+        v = (value or "").strip()
+        if len(v) < 2:
+            raise serializers.ValidationError("Nombre obligatorio (mínimo 2 caracteres).")
+        if not re.match(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ\s'-]+$", v):
+            raise serializers.ValidationError("Nombre inválido. Solo letras y espacios.")
+        return v
+
+    def validate_last_name(self, value):
+        v = (value or "").strip()
+        if len(v) < 2:
+            raise serializers.ValidationError("Apellido obligatorio (mínimo 2 caracteres).")
+        if not re.match(r"^[A-Za-zÁÉÍÓÚÑáéíóúñ\s'-]+$", v):
+            raise serializers.ValidationError("Apellido inválido. Solo letras y espacios.")
+        return v
+
     def validate_email(self, value):
-        email = value.strip().lower()
+        email = (value or "").strip().lower()
+        if not email:
+            raise serializers.ValidationError("Correo obligatorio. Ej: nombre@dominio.cl")
         if User.objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError("Este email ya está registrado.")
+            raise serializers.ValidationError("Este correo ya está registrado.")
         return email
 
+    def validate_telefono(self, value):
+        return normalizar_telefono_cl(value)
+
+    def validate_rut_dni(self, value):
+        return normalizar_y_validar_rut(value)
+
+    def validate_password(self, value):
+        return validar_password_segura(value)
+
     def validate(self, attrs):
-        if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError(
-                {"password2": "Las contraseñas no coinciden."}
-            )
+        if attrs.get("password") != attrs.get("password2"):
+            raise serializers.ValidationError({"password2": "Las contraseñas no coinciden."})
         return attrs
 
     @transaction.atomic
     def create(self, validated):
         email = validated["email"].lower()
 
-        # username = email
         user = User.objects.create_user(
             username=email,
             email=email,
@@ -228,20 +404,17 @@ class RegisterSerializer(serializers.Serializer):
             password=validated["password"],
         )
 
-        # Cliente asociado
         cliente = Cliente.objects.create(
             user=user,
-            telefono=(validated.get("telefono") or "").strip(),
+            telefono=validated.get("telefono"),
             direccion=(validated.get("direccion") or "").strip(),
-            rut_dni=(validated.get("rut_dni") or "").strip(),
-            acepta_comunicaciones=validated.get(
-                "acepta_comunicaciones", False
-            ),
+            rut_dni=validated.get("rut_dni"),
+            acepta_comunicaciones=validated.get("acepta_comunicaciones", False),
         )
 
-        # Mascota opcional
         nombre = (validated.get("mascota_nombre") or "").strip()
         especie = (validated.get("mascota_especie") or "").strip()
+
         if nombre and especie:
             Mascota.objects.create(
                 cliente=cliente,
@@ -251,6 +424,9 @@ class RegisterSerializer(serializers.Serializer):
             )
 
         return user
+
+
+# ---------- Citas ----------
 
 
 # ---------- Citas ----------
@@ -405,7 +581,6 @@ class CitaSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    # ❌ BORRADO create() — ahora el ViewSet maneja todo
     
 
 class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
@@ -576,7 +751,6 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         return registro
 
 # ---------- Inventario ----------
-
 class ProductoSerializer(serializers.ModelSerializer):
     alerta_stock = serializers.SerializerMethodField()
     alerta_vencimiento = serializers.SerializerMethodField()
@@ -588,8 +762,8 @@ class ProductoSerializer(serializers.ModelSerializer):
             "nombre",
             "codigo",
             "categoria",
-            "laboratorio",     # 🆕
-            "lote",            # 🆕
+            "laboratorio",
+            "lote",
             "stock",
             "stock_minimo",
             "fecha_vencimiento",
@@ -603,25 +777,112 @@ class ProductoSerializer(serializers.ModelSerializer):
     def get_alerta_vencimiento(self, obj):
         return obj.en_alerta_vencimiento()
 
+    # -------- VALIDACIONES --------
+
+    def validate_stock(self, value):
+        if value is None:
+            return 0
+        try:
+            v = int(value)
+        except Exception:
+            raise serializers.ValidationError("El stock debe ser numérico.")
+        if v < 0:
+            raise serializers.ValidationError("El stock no puede ser negativo.")
+        return v
+
+    def validate_stock_minimo(self, value):
+        if value is None:
+            return 0
+        try:
+            v = int(value)
+        except Exception:
+            raise serializers.ValidationError("El stock mínimo debe ser numérico.")
+        if v < 0:
+            raise serializers.ValidationError("El stock mínimo no puede ser negativo.")
+        return v
+
+    def validate_fecha_vencimiento(self, value):
+        if not value:
+            return value
+        if value < timezone.localdate():
+            raise serializers.ValidationError(
+                "La fecha de vencimiento no puede estar en el pasado."
+            )
+        return value
 class MovimientoInventarioSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovimientoInventario
         fields = "__all__"
+        read_only_fields = ["fecha"]
+
+    def validate_cantidad(self, value):
+        if value is None:
+            raise serializers.ValidationError("La cantidad es obligatoria.")
+        try:
+            value = int(value)
+        except Exception:
+            raise serializers.ValidationError("La cantidad debe ser numérica.")
+        if value <= 0:
+            raise serializers.ValidationError("La cantidad debe ser mayor a 0.")
+        return value
+
+    def validate(self, attrs):
+        producto = attrs.get("producto")
+        tipo = attrs.get("tipo")
+        cantidad = attrs.get("cantidad")
+
+        if not producto:
+            raise serializers.ValidationError({"producto": "Producto es obligatorio."})
+        if tipo not in ["ingreso", "salida"]:
+            raise serializers.ValidationError({"tipo": "Tipo inválido."})
+
+        # Evitar stock negativo en salidas
+        if tipo == "salida":
+            stock_actual = producto.stock or 0
+            if cantidad and stock_actual < cantidad:
+                raise serializers.ValidationError(
+                    {"cantidad": f"Stock insuficiente. Disponible {stock_actual}."}
+                )
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        producto = validated_data.get("producto")
+        if not producto:
+            raise serializers.ValidationError({"producto": "Producto es obligatorio."})
+
+        # Bloquea el producto para evitar carreras
+        producto = Producto.objects.select_for_update().get(pk=producto.pk)
+        tipo = validated_data.get("tipo")
+        cantidad = int(validated_data.get("cantidad") or 0)
+
+        if tipo == "salida":
+            stock_actual = int(producto.stock or 0)
+            if stock_actual < cantidad:
+                raise serializers.ValidationError(
+                    {"cantidad": f"Stock insuficiente. Disponible: {stock_actual}."}
+                )
+
+        validated_data["producto"] = producto
+        return super().create(validated_data)
+
+
+    @transaction.atomic
+    def create(self, validated_data):
+        """
+        Bloquea el producto para evitar condiciones de carrera.
+        El ajuste real de stock lo hace el model.save() al crear el movimiento.
+        """
+        producto = validated_data["producto"]
+        Producto.objects.select_for_update().filter(pk=producto.pk).first()
+        return super().create(validated_data)
 
 
 class InventarioSerializer(serializers.Serializer):
     stock_bajo = ProductoSerializer(many=True)
     por_vencer = ProductoSerializer(many=True)
 
-class MovimientoInventarioSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MovimientoInventario
-        fields = "__all__"
-
-
-class InventarioSerializer(serializers.Serializer):
-    stock_bajo = ProductoSerializer(many=True)
-    por_vencer = ProductoSerializer(many=True)
 
 # ---------- Horarios y bloqueos de agenda ----------
 
@@ -669,6 +930,25 @@ class BloqueoAgendaSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("veterinario",)
 
+    def validate(self, attrs):
+        inicio = attrs.get("inicio") or getattr(self.instance, "inicio", None)
+        fin = attrs.get("fin") or getattr(self.instance, "fin", None)
+        box = (attrs.get("box") if "box" in attrs else getattr(self.instance, "box", "")) or ""
+        vet = attrs.get("veterinario") or getattr(self.instance, "veterinario", None)
+
+        if inicio and fin and fin <= inicio:
+            raise serializers.ValidationError({"fin": "La fecha/hora fin debe ser mayor que inicio."})
+
+        if vet and inicio and fin:
+            qs = BloqueoAgenda.objects.filter(veterinario=vet, box=box)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.filter(inicio__lt=fin, fin__gt=inicio).exists():
+                raise serializers.ValidationError("Este bloqueo se solapa con otro bloqueo existente.")
+
+        return attrs
+
+
 class MotivoConsultaSerializer(serializers.ModelSerializer):
     creado_por_nombre = serializers.SerializerMethodField(read_only=True)
 
@@ -691,22 +971,22 @@ class MotivoConsultaSerializer(serializers.ModelSerializer):
         ]
 
     def get_creado_por_nombre(self, obj):
-        if obj.creado_por:
-          # trata de usar nombre completo si tu User lo tiene
-          full_name = getattr(obj.creado_por, "get_full_name", None)
-          if callable(full_name):
-              nombre = full_name()
-              if nombre:
-                  return nombre
-          return obj.creado_por.username
-        return None
+        creado_por = getattr(obj, "creado_por", None)
+        if not creado_por:
+            return None
+
+        full_name = getattr(creado_por, "get_full_name", None)
+        if callable(full_name):
+            nombre = full_name()
+            if nombre:
+                return nombre
+
+        return getattr(creado_por, "username", None) or getattr(creado_por, "email", None)
 
     def create(self, validated_data):
-        """
-        Cuando se crea desde la API, le metemos automáticamente el usuario
-        que hizo la petición como 'creado_por'.
-        """
+        """Asigna automáticamente request.user como creado_por."""
         request = self.context.get("request")
-        if request and request.user and request.user.is_authenticated:
+        if request and getattr(request, "user", None) and request.user.is_authenticated:
             validated_data["creado_por"] = request.user
         return super().create(validated_data)
+
