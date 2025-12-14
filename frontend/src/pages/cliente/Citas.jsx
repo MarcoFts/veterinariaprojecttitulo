@@ -253,7 +253,7 @@ export default function Citas() {
     const val = e.target.value;
     const hoy = dayjs().format("YYYY-MM-DD");
 
-    // ❌ si el usuario intenta seleccionar un día pasado
+    //si el usuario intenta seleccionar un día pasado
     if (dayjs(val).isBefore(hoy)) {
       alert("No puedes ver ni agendar en días pasados.");
       setFecha(hoy);
@@ -348,7 +348,7 @@ const confirmarCancelacion = async () => {
   setLoadingCancelar(true);
 
   try {
-    // 👈 usamos el ID guardado en estado
+    // usamos el ID guardado en estado
     await cancelarCita(confirmCitaId);
 
     // recargar citas del día
@@ -893,7 +893,6 @@ const confirmarCancelacion = async () => {
         />
 
         {/* Modal reprogramar */}
-        {/* ⭐⭐⭐ MINI-MODAL PREMIUM DE CANCELACIÓN ⭐⭐⭐ */}
         {confirmOpen && (
           <div className="fixed inset-0 flex items-center justify-center z-[9999]">
             <div className="bg-white p-6 rounded-xl shadow-xl w-[90%] max-w-sm border border-neutral-200 animate-fadeScale">
@@ -925,8 +924,6 @@ const confirmarCancelacion = async () => {
             </div>
           </div>
         )}
-        {/* ⭐⭐⭐ FIN MINI-MODAL ⭐⭐⭐ */}
-
       </div>
     </LayoutCliente>
   );

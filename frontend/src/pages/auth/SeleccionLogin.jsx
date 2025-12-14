@@ -1,131 +1,121 @@
-import { Link, Navigate } from "react-router-dom";
-import { isAuthenticated } from "../../auth";
+import { useNavigate } from "react-router-dom";
+import { User, Stethoscope, Shield } from "lucide-react";
 
 export default function SeleccionLogin() {
-  // Si ya hay sesión, no mostrar selección → volver al home cliente
-  if (isAuthenticated()) {
-    return <Navigate to="/cliente/home" replace />;
-  }
+  const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 flex flex-col md:flex-row">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 px-4">
+      <div className="w-full max-w-6xl min-h-[560px] bg-white rounded-3xl shadow-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 overflow-hidden">
 
-        {/* IZQUIERDA — Degradado azul */}
-        <div className="relative md:w-1/2 w-full bg-gradient-to-br from-sky-400 via-blue-500 to-blue-700 text-white p-8 md:p-12 flex flex-col justify-between">
+        {/* PANEL IZQUIERDO – HERO PREMIUM */}
+        <div className="relative p-10 flex flex-col justify-between bg-gradient-to-br from-sky-500 via-sky-600 to-blue-700 text-white">
+          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_left,white,transparent_60%)]" />
 
-          {/* Decoración */}
-          <div className="pointer-events-none absolute inset-0 opacity-15">
-            <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/20 blur-2xl" />
-            <div className="absolute bottom-0 left-0 w-48 h-48 rounded-full bg-white/10 blur-3xl" />
-          </div>
+          <div className="relative z-10">
+            <p className="text-xs font-semibold tracking-widest uppercase opacity-80">
+              Plataforma veterinaria
+            </p>
 
-          {/* Texto principal */}
-          <div className="relative">
-            <h1 className="text-sm font-semibold uppercase tracking-[0.2em] mb-4 text-white/80">
-              Plataforma Veterinaria
+            <h1 className="text-4xl font-bold mt-4 leading-tight">
+              Bienvenido a <br /> Vetyon
             </h1>
 
-            <h2 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
-              Bienvenido a Vetyon
-            </h2>
-
-            <p className="text-sm md:text-base text-white/85 max-w-md">
-              Una plataforma creada para facilitar la gestión diaria tanto a dueños de
-              mascotas como a profesionales veterinarios. Vetyon permite administrar
-              citas, pacientes, historial clínico y la comunicación entre clínica y
-              clientes de manera rápida, clara y moderna.
+            <p className="text-sm mt-5 max-w-sm opacity-90 leading-relaxed">
+              Gestiona citas, pacientes e inventario desde una plataforma
+              moderna, clara y profesional.
             </p>
           </div>
 
-          <div className="relative mt-8 space-y-3 text-sm md:text-base">
-            <p className="font-medium text-white/90">Con Vetyon podrás:</p>
-            <ul className="space-y-1 text-white/85">
-              <li>• Agendar horas y revisar disponibilidad en tiempo real.</li>
-              <li>• Administrar información de pacientes y mascotas.</li>
-              <li>• Acceder al historial clínico y datos importantes.</li>
-              <li>• Mantener comunicación clara entre clínica y clientes.</li>
-            </ul>
-          </div>
-
+          <ul className="relative z-10 text-sm space-y-3 opacity-90">
+            <li className="flex items-center gap-2">• Inventario centralizado</li>
+            <li className="flex items-center gap-2">• Control de stock y vencimientos</li>
+            <li className="flex items-center gap-2">• Acceso seguro por roles</li>
+          </ul>
         </div>
 
-        {/* DERECHA */}
-        <div className="md:w-1/2 w-full p-8 md:p-12 flex flex-col justify-center">
-          <div className="mb-8 text-center md:text-left">
-            <h3 className="text-2xl md:text-3xl font-bold text-slate-900 mb-3">
+        {/* PANEL DERECHO */}
+        <div className="p-10 flex flex-col justify-center gap-8">
+
+          <div>
+            <h2 className="text-2xl font-semibold text-slate-900">
               ¿Cómo deseas ingresar?
-            </h3>
-            <p className="text-sm md:text-base text-slate-600">
-              Selecciona el tipo de cuenta con el que deseas acceder.
+            </h2>
+            <p className="text-sm text-slate-500 mt-2">
+              Selecciona el tipo de cuenta.
             </p>
           </div>
 
-          <div className="space-y-5">
-
-            {/* CLIENTE */}
-            <Link
-              to="/login/cliente"
-              className="group block rounded-2xl border border-slate-200 hover:border-sky-500/70 hover:shadow-lg transition-all bg-white"
-            >
-              <div className="p-5 md:p-6 flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-50 group-hover:bg-sky-100 transition">
-                  <span className="text-2xl">🐶</span>
-                </div>
-
-                <div className="flex-1 text-left">
-                  <h4 className="text-base md:text-lg font-semibold text-slate-900">
-                    Ingresar como Cliente
-                  </h4>
-                  <p className="text-xs md:text-sm text-slate-500 mt-1">
-                    Agenda horas, gestiona tus mascotas y revisa tu historial.
-                  </p>
-
-                  <span
-                    className="mt-3 inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs md:text-sm font-semibold 
-                    bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md 
-                    group-hover:shadow-lg group-hover:opacity-95 transition"
-                  >
-                    Entrar como Cliente
-                  </span>
-                </div>
+          {/* CLIENTE */}
+          <div className="group rounded-2xl border border-slate-200 p-5 flex items-center justify-between transition-all hover:border-sky-300 hover:shadow-md">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-sky-100 flex items-center justify-center">
+                <User className="h-5 w-5 text-sky-600" />
               </div>
-            </Link>
-
-            {/* VETERINARIO */}
-            <Link
-              to="/login/veterinario"
-              className="group block rounded-2xl border border-slate-200 hover:border-sky-500/70 hover:shadow-lg transition-all bg-white"
-            >
-              <div className="p-5 md:p-6 flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 group-hover:bg-blue-100 transition">
-                  <span className="text-2xl">🩺</span>
-                </div>
-
-                <div className="flex-1 text-left">
-                  <h4 className="text-base md:text-lg font-semibold text-slate-900">
-                    Ingresar como Veterinario
-                  </h4>
-                  <p className="text-xs md:text-sm text-slate-500 mt-1">
-                    Administra tu agenda, pacientes y panel clínico.
-                  </p>
-
-                  <span
-                    className="mt-3 inline-flex items-center justify-center rounded-lg px-4 py-2 text-xs md:text-sm font-semibold 
-                    bg-gradient-to-r from-blue-500 to-sky-600 text-white shadow-md 
-                    group-hover:shadow-lg group-hover:opacity-95 transition"
-                  >
-                    Entrar como Veterinario
-                  </span>
-                </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">
+                  Ingresar como Cliente
+                </p>
+                <p className="text-xs text-slate-500">
+                  Agenda horas y gestiona tus mascotas.
+                </p>
               </div>
-            </Link>
-
+            </div>
+            <button
+              onClick={() => navigate("/login/cliente")}
+              className="rounded-xl bg-sky-600 px-8 py-2 text-xs font-semibold text-white hover:bg-sky-700 min-w-[140px]"
+            >
+              Entrar
+            </button>
           </div>
 
-          <p className="mt-6 text-[11px] md:text-xs text-slate-400 text-center md:text-left">
-            *La autenticación real se conectará al backend en una etapa posterior.
-          </p>
+          {/* VETERINARIO */}
+          <div className="group rounded-2xl border border-slate-200 p-5 flex items-center justify-between transition-all hover:border-emerald-300 hover:shadow-md">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <Stethoscope className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">
+                  Ingresar como Veterinario
+                </p>
+                <p className="text-xs text-slate-500">
+                  Agenda, pacientes e historial clínico.
+                </p>
+              </div>
+              
+            </div>
+            <button
+              onClick={() => navigate("/login/veterinario")}
+              className="rounded-xl bg-emerald-600 px-8 py-2 text-xs font-semibold text-white hover:bg-emerald-700 min-w-[140px]"
+            >
+              Entrar
+            </button>
+          </div>
+
+          {/* ADMINISTRADOR */}
+          <div className="group rounded-2xl border border-slate-200 p-5 flex items-center justify-between transition-all hover:border-slate-400 hover:shadow-md">
+            <div className="flex items-center gap-4">
+              <div className="h-11 w-11 rounded-xl bg-slate-200 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-slate-700" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900 text-sm">
+                  Ingresar como Administrador
+                </p>
+                <p className="text-xs text-slate-500">
+                  Gestión de inventario y control del sistema.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate("/login/admin")}
+              className="rounded-xl bg-slate-800 px-8 py-2 text-xs font-semibold text-white hover:bg-slate-900 min-w-[140px]"
+            >
+              Entrar
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

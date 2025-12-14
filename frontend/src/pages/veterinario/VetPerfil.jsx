@@ -131,7 +131,7 @@ export default function VetPerfil() {
 
       setSuccessModal({
         open: true,
-        message: "Cambios guardados correctamente.",
+        message: "Error de conexion con el servidor",
       });
 
       initialDataRef.current = { ...payload };

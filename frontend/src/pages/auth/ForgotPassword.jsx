@@ -24,7 +24,7 @@ export default function ForgotPassword() {
         setMessage(data.error || data.detail || "Error al procesar la solicitud.");
       }
     } catch (err) {
-      setMessage("⚠ Error de conexión con el servidor.");
+      setMessage("Error de conexion con el servidor");
     } finally {
       setLoading(false);
     }

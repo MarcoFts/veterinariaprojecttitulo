@@ -161,7 +161,7 @@ export default function ModalReprogramarCitaCliente({
   // si no está abierto, nada
   if (!open || !cita) return null;
 
-  // ⚠️ AQUÍ VIENE LA DIFERENCIA IMPORTANTE:
+  // AQUÍ VIENE LA DIFERENCIA IMPORTANTE:
   // usamos createPortal para dibujar el modal directamente en <body>,
   // por encima de navbar, layout, etc. z-[60] para que gane a todo.
   return createPortal(

@@ -21,7 +21,7 @@ import {
 
 export default function VetReportes() {
   const hoy = dayjs().format("YYYY-MM-DD");
-  // 👇 Ampliamos el rango por defecto a 90 días
+  // Ampliamos el rango por defecto a 90 días
   const hace90dias = dayjs().subtract(90, "day").format("YYYY-MM-DD");
 
   const [filtros, setFiltros] = useState({

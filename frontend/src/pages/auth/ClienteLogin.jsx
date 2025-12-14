@@ -36,7 +36,7 @@ export default function ClienteLogin() {
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
 
-      // 🔥 GUARDA cliente_id EN LOCALSTORAGE (OBLIGATORIO)
+      // GUARDA cliente_id EN LOCALSTORAGE (OBLIGATORIO)
       localStorage.setItem("cliente_id", me.cliente_id);
 
 

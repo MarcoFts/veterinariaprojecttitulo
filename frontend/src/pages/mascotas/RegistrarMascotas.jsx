@@ -47,8 +47,12 @@ export default function RegistrarMascota() {
   const [error, setError] = useState("");
   const [showDateAlert, setShowDateAlert] = useState(false);
 
-  // 🔥 NUEVO: popup de éxito
+  // NUEVO: popup de éxito
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // NUEVO: popup validaciones generales
+  const [showValidationAlert, setShowValidationAlert] = useState(false);
+  const [validationMessage, setValidationMessage] = useState("");
 
   // ---------------------------------------------------------
   // VALIDAR FECHA FUTURA
@@ -58,6 +62,23 @@ export default function RegistrarMascota() {
     const today = new Date();
     const selected = new Date(dateStr);
     return selected > today;
+  };
+
+  // ---------------------------------------------------------
+  // CALCULAR EDAD (AÑOS)
+  // ---------------------------------------------------------
+  const calcularEdad = (dateStr) => {
+    if (!dateStr) return null;
+    const fecha = new Date(dateStr);
+    if (isNaN(fecha)) return null;
+
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - fecha.getFullYear();
+    const m = hoy.getMonth() - fecha.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < fecha.getDate())) {
+      edad--;
+    }
+    return edad;
   };
 
   const handleChange = (e) => {
@@ -91,6 +112,59 @@ export default function RegistrarMascota() {
     if (v === "si" || v === "sí") return "Si";
     if (v === "no") return "No";
 
+    return "__INVALID__";
+  };
+
+  // ---------------------------------------------------------
+  // VALIDACIONES FRONT REALISTAS
+  // ---------------------------------------------------------
+  const validarFormulario = () => {
+    // Nombre obligatorio
+    if (!pet.nombre || !pet.nombre.trim()) {
+      return "El nombre de la mascota es obligatorio.";
+    }
+
+    // Especie obligatoria
+    if (!pet.especie) {
+      return "Debes seleccionar una especie válida.";
+    }
+
+    // Raza (si viene) largo razonable
+    if (pet.raza && pet.raza.trim().length > 100) {
+      return "La raza no puede superar los 100 caracteres.";
+    }
+
+    // Fecha nacimiento: no futura + edad máxima 100
+    if (pet.fechaNacimiento) {
+      if (isFutureDate(pet.fechaNacimiento)) {
+        return "La fecha de nacimiento no puede ser en el futuro.";
+      }
+
+      const edad = calcularEdad(pet.fechaNacimiento);
+      if (edad !== null && edad > 100) {
+        return "La edad de la mascota no es válida (máximo 100 años).";
+      }
+    }
+
+    // Peso: > 0 y <= 250
+    if (pet.peso !== "" && pet.peso !== null && pet.peso !== undefined) {
+      const peso = Number(pet.peso);
+      if (Number.isNaN(peso)) return "El peso ingresado no es válido.";
+      if (peso <= 0) return "El peso debe ser mayor a cero.";
+      if (peso > 250) return "El peso no puede superar los 250 kg.";
+    }
+
+    // Microchip: Si/No/vacío
+    const chip = normalizeMicrochip(pet.microchip);
+    if (chip === "__INVALID__") {
+      return "El microchip solo puede ser 'Si' o 'No' (o dejarse vacío).";
+    }
+
+    // Notas: largo razonable
+    if (pet.notas && pet.notas.length > 1000) {
+      return "Las notas no pueden superar los 1000 caracteres.";
+    }
+
     return null;
   };
 
@@ -102,6 +176,16 @@ export default function RegistrarMascota() {
     setSaving(true);
     setError("");
 
+    // Validaciones front
+    const errorValidacion = validarFormulario();
+    if (errorValidacion) {
+      setSaving(false);
+      setValidationMessage(errorValidacion);
+      setShowValidationAlert(true);
+      return;
+    }
+
+    // Mantengo tu popup específico por fecha futura (por si quedó abierto)
     if (isFutureDate(pet.fechaNacimiento)) {
       setSaving(false);
       setShowDateAlert(true);
@@ -116,11 +200,13 @@ export default function RegistrarMascota() {
     }
 
     try {
+      const chip = normalizeMicrochip(pet.microchip);
+
       const payload = {
         cliente_id: clienteId,
-        nombre: pet.nombre,
+        nombre: pet.nombre.trim(),
         especie: normalizeSpecies(pet.especie),
-        raza: pet.raza || null,
+        raza: pet.raza ? pet.raza.trim() : null,
         sexo:
           pet.sexo === "macho"
             ? "Macho"
@@ -128,9 +214,9 @@ export default function RegistrarMascota() {
             ? "Hembra"
             : "No informado",
         fecha_nacimiento: pet.fechaNacimiento || null,
-        peso_kg: pet.peso ? Number(pet.peso) : null,
+        peso_kg: pet.peso !== "" ? Number(pet.peso) : null,
         esterilizado: !!pet.esterilizado,
-        microchip: normalizeMicrochip(pet.microchip),
+        microchip: chip === "__INVALID__" ? null : chip,
         notas_salud: pet.notas || "",
       };
 
@@ -299,7 +385,8 @@ export default function RegistrarMascota() {
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
                 <ScanLine size={14} className="text-sky-500" />
-                Microchip <span className="text-[11px] text-slate-400">(opcional)</span>
+                Microchip{" "}
+                <span className="text-[11px] text-slate-400">(opcional)</span>
               </label>
               <input
                 type="text"
@@ -327,14 +414,13 @@ export default function RegistrarMascota() {
               />
             </div>
 
-            {error && (
-              <p className="text-red-600 text-sm mt-2">{error}</p>
-            )}
+            {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
 
             {/* Footer */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
               <p className="text-[11px] text-slate-400 max-w-md">
-                *La información será utilizada para facilitar tus próximas reservas.
+                *La información será utilizada para facilitar tus próximas
+                reservas.
               </p>
 
               <button
@@ -353,9 +439,27 @@ export default function RegistrarMascota() {
         </section>
       </div>
 
+      {/* POPUP VALIDACIONES GENERALES */}
+      {showValidationAlert && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
+            <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+              Revisa el formulario
+            </h2>
+            <p className="text-neutral-600 text-sm mb-6">{validationMessage}</p>
+            <button
+              onClick={() => setShowValidationAlert(false)}
+              className="w-full py-2 rounded-lg bg-sky-600 text-white font-semibold hover:bg-sky-700 transition"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* POPUP FECHA FUTURA */}
       {showDateAlert && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] p-4">
           <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
             <h2 className="text-lg font-semibold text-neutral-800 mb-2">
               Fecha inválida
@@ -375,7 +479,8 @@ export default function RegistrarMascota() {
 
       {/* POPUP DE ÉXITO (VETYON STYLE) */}
       {showSuccess && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] p-4">
+
           <div className="bg-white rounded-xl shadow-xl border border-neutral-200 p-6 w-full max-w-xs text-center animate-fadeScale">
             <h2 className="text-lg font-semibold text-slate-800 mb-2">
               Mascota registrada

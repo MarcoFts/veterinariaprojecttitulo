@@ -1,11 +1,13 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import VetRoute from "./components/routing/VetRoute";
 import ClienteRoute from "./components/routing/ClienteRoute";
+import AdminRoute from "./components/routing/AdminRoute";
 
 // Auth
 import SeleccionLogin from "./pages/auth/SeleccionLogin";
 import ClienteLogin from "./pages/auth/ClienteLogin";
 import VeterinarioLogin from "./pages/auth/VeterinarioLogin";
+import AdminLogin from "./pages/administrador/AdminLogin";
 import Registro from "./pages/auth/Registro";
 import CuentaCreada from "./pages/auth/CuentaCreada";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -17,27 +19,30 @@ import Citas from "./pages/cliente/Citas";
 import MisCitas from "./pages/cliente/MisCitas";
 import MisMascotas from "./pages/cliente/MisMascotas";
 import RegistrarMascotas from "./pages/mascotas/RegistrarMascotas";
+import ClientePerfil from "./pages/cliente/ClientePerfil";
 
 // Veterinario
 import VetHome from "./pages/veterinario/VetHome";
 import VetAgenda from "./pages/veterinario/VetAgenda";
+import VetAgendaDia from "./pages/veterinario/VetAgendaDia";
 import VetCitas from "./pages/veterinario/VetCitas";
+import VetHorarios from "./pages/veterinario/VetHorarios";
 import VetPacientes from "./pages/veterinario/VetPacientes";
 import VetFichaClinica from "./pages/veterinario/VetFichaClinica";
-import VetAgendaDia from "./pages/veterinario/VetAgendaDia";
-import VetHorarios from "./pages/veterinario/VetHorarios";
 import VetInventario from "./pages/veterinario/VetInventario";
 import VetPerfil from "./pages/veterinario/VetPerfil";
 import VetReportes from "./pages/veterinario/VetReportes";
-import ClientePerfil from "./pages/cliente/ClientePerfil";
-
 import ConfigMotivosConsulta from "./pages/veterinario/ConfigMotivosConsultas";
+
+// Admin
+import LayoutAdmin from "./components/layout/LayoutAdmin";
+import AdminHome from "./pages/administrador/AdminHome";
+import AdminInventario from "./pages/administrador/AdminInventario";
 
 function App() {
   return (
     <Routes>
-
-      {/* Root → selección */}
+      {/* Root */}
       <Route path="/" element={<Navigate to="/seleccion-login" replace />} />
 
       {/* Selección */}
@@ -50,12 +55,13 @@ function App() {
       {/* Login */}
       <Route path="/login/cliente" element={<ClienteLogin />} />
       <Route path="/login/veterinario" element={<VeterinarioLogin />} />
+      <Route path="/login/admin" element={<AdminLogin />} />
 
       {/* Recuperación de contraseña */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:uidb64/:token" element={<ResetPassword />} />
 
-      {/* Cliente (protegidas) */}
+      {/* ================= CLIENTE ================= */}
       <Route
         path="/cliente/home"
         element={
@@ -98,7 +104,7 @@ function App() {
       />
       <Route path="/cliente/perfil" element={<ClientePerfil />} />
 
-      {/* Veterinario (protegidas) */}
+      {/* ================= VETERINARIO ================= */}
       <Route
         path="/veterinario/home"
         element={
@@ -107,7 +113,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/agenda"
         element={
@@ -116,7 +121,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/agenda-dia"
         element={
@@ -125,7 +129,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/inventario"
         element={
@@ -134,7 +137,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/citas"
         element={
@@ -143,7 +145,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/horarios"
         element={
@@ -152,7 +153,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/pacientes"
         element={
@@ -161,7 +161,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/paciente/:id"
         element={
@@ -170,7 +169,6 @@ function App() {
           </VetRoute>
         }
       />
-
       <Route
         path="/veterinario/perfil"
         element={
@@ -188,8 +186,17 @@ function App() {
           </VetRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/seleccion-login" replace />} />
 
+      {/* ================= ADMIN ================= */}
+      <Route element={<AdminRoute />}>
+        <Route path="/admin" element={<LayoutAdmin />}>
+          <Route path="home" element={<AdminHome />} />
+          <Route path="inventario" element={<AdminInventario />} />
+        </Route>
+      </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/seleccion-login" replace />} />
     </Routes>
   );
 }

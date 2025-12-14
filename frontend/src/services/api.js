@@ -266,3 +266,12 @@ export function updateClientePerfil(payload) {
 }
 
 export default api;
+
+// mascotas (editar / eliminar)
+export function actualizarMascota(id, payload) {
+  return api.put(`/mascotas/${id}/`, payload);
+}
+
+export function eliminarMascota(id) {
+  return api.delete(`/mascotas/${id}/`);
+}

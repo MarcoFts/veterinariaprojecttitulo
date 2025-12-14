@@ -4,6 +4,26 @@ import LayoutVet from "../../components/layout/LayoutVet";
 import { UserRound, Eye } from "lucide-react";
 import { getMascotas } from "../../services/api";
 
+// ---------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------
+const calcularEdad = (fechaNacimiento) => {
+  if (!fechaNacimiento) return null;
+
+  const fecha = new Date(fechaNacimiento);
+  if (isNaN(fecha)) return null;
+
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - fecha.getFullYear();
+  const m = hoy.getMonth() - fecha.getMonth();
+
+  if (m < 0 || (m === 0 && hoy.getDate() < fecha.getDate())) {
+    edad--;
+  }
+
+  return edad >= 0 ? edad : null;
+};
+
 export default function VetPacientes() {
   const [pacientes, setPacientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,7 +32,7 @@ export default function VetPacientes() {
     async function fetchPacientes() {
       try {
         const res = await getMascotas();
-        setPacientes(res.data || []);
+        setPacientes(Array.isArray(res.data) ? res.data : []);
       } catch (error) {
         console.error("Error cargando pacientes atendidos:", error);
       } finally {
@@ -23,9 +43,18 @@ export default function VetPacientes() {
     fetchPacientes();
   }, []);
 
+  // ---------------------------------------------------------
+  // TEXTO EDAD
+  // ---------------------------------------------------------
   const getEdadTexto = (m) => {
+    // 1) Si backend ya mandara edad directa
     if (m.edad) return `${m.edad} años`;
-    if (m.edad_aproximada) return `${m.edad_aproximada} años (aprox.)`;
+
+    // 2) Calcular desde fecha_nacimiento
+    const edadCalculada = calcularEdad(m.fecha_nacimiento);
+    if (edadCalculada !== null) return `${edadCalculada} años`;
+
+    // 3) Fallback
     return "Edad no registrada";
   };
 
@@ -70,16 +99,20 @@ export default function VetPacientes() {
                   <div className="h-10 w-10 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
                     <UserRound className="h-5 w-5" />
                   </div>
+
                   <div>
                     <h2 className="font-semibold text-lg text-slate-900">
-                      {m.nombre}
+                      {m.nombre || "Sin nombre"}
                     </h2>
+
                     <p className="text-sm text-slate-600">
                       Especie: {m.especie || "No registrada"}
                     </p>
+
                     <p className="text-sm text-slate-600">
                       Edad: {getEdadTexto(m)}
                     </p>
+
                     <p className="text-sm text-slate-600">
                       Dueño: {getDuenoTexto(m)}
                     </p>
@@ -90,6 +123,7 @@ export default function VetPacientes() {
                   <span className="text-xs text-slate-400">
                     Historia clínica #{m.id}
                   </span>
+
                   <Link
                     to={`/veterinario/paciente/${m.id}`}
                     className="inline-flex items-center gap-1 text-sm font-semibold text-sky-600 hover:text-sky-700"

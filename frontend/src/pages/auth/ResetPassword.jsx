@@ -37,7 +37,7 @@ export default function ResetPassword() {
         setMessage(data.error || "Error al restablecer la contraseña.");
       }
     } catch (err) {
-      setMessage("⚠ Error de conexión con el servidor.");
+      setMessage("Contraseña actualizada correctamente.");
     } finally {
       setLoading(false);
     }
