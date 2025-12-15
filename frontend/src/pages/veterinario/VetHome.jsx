@@ -374,10 +374,6 @@ export default function VetHome() {
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400">
-                *Este módulo se alimenta de tus citas del día registradas en la
-                agenda.*
-              </p>
               <Link
                 to="/veterinario/agenda"
                 className="text-[11px] font-semibold text-sky-600 hover:text-blue-700 transition"
@@ -400,11 +396,6 @@ export default function VetHome() {
                 agenda y pacientes.
               </p>
             </div>
-
-            <p className="mt-4 text-[11px] text-slate-400">
-              *Más adelante podrás vincular estas notas a citas y pacientes
-              específicos dentro del sistema.*
-            </p>
           </div>
         </section>
       </div>

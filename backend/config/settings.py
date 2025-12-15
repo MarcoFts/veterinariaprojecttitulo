@@ -78,13 +78,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # BASE DE DATOS
 # -----------------------------
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "veterinaria_db",
-        "USER": "veterinaria_user",
-        "PASSWORD": "clave_segura",
-        "HOST": "localhost",
-        "PORT": "5432",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'vetyon',
+        'USER': 'postgres',
+        'PASSWORD': 'Vetyon2025!',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
