@@ -385,3 +385,36 @@ class MotivoConsulta(models.Model):
 
     def __str__(self):
         return self.nombre
+
+class Notificacion(models.Model):
+    TIPO = (
+        ("info", "Info"),
+        ("success", "Success"),
+        ("warning", "Warning"),
+        ("danger", "Danger"),
+    )
+
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notificaciones",
+    )
+
+    titulo = models.CharField(max_length=180)
+    mensaje = models.TextField(blank=True, default="")
+    tipo = models.CharField(max_length=20, choices=TIPO, default="info")
+
+    # URL interna del frontend (ej: /veterinario/citas o /cliente/citas)
+    url = models.CharField(max_length=255, blank=True, default="")
+
+    leida = models.BooleanField(default=False)
+    creada_en = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-creada_en", "-id"]
+        indexes = [
+            models.Index(fields=["usuario", "leida", "creada_en"]),
+        ]
+
+    def __str__(self):
+        return f"[{self.usuario_id}] {self.titulo} ({'leída' if self.leida else 'nueva'})"

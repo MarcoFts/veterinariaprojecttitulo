@@ -194,17 +194,18 @@ export function crearProducto(data) {
   return api.post("/productos/", data);
 }
 
-// Actualizar producto completo
-export function actualizarProducto(id, data) {
-  return api.put(`/productos/${id}/`, data);
-}
+export const actualizarProducto = (id, payload) =>
+  api.patch(`/productos/${id}/`, payload);
+
+export const ajustarStockProducto = (id, delta, motivo = "") =>
+  api.post(`/productos/${id}/ajustar_stock/`, { delta, motivo });
 
 // Eliminar producto
 export function eliminarProducto(id) {
   return api.delete(`/productos/${id}/`);
 }
 
-// Agregar stock (endpoint que luego conectaremos en backend)
+// Agregar stock
 export function agregarStockProducto({ producto_id, cantidad, motivo }) {
   return api.post("/inventario/agregar-stock/", {
     producto_id,
@@ -222,7 +223,7 @@ export const crearMotivoConsulta = (payload) =>
   api.post("/motivos-consulta/", payload);
 
 export const editarMotivoConsulta = (id, payload) =>
-  api.put(`/motivos-consulta/${id}/`, payload);
+  api.patch(`/motivos-consulta/${id}/`, payload);
 
 export const eliminarMotivoConsulta = (id) =>
   api.delete(`/motivos-consulta/${id}/`);
@@ -275,3 +276,40 @@ export function actualizarMascota(id, payload) {
 export function eliminarMascota(id) {
   return api.delete(`/mascotas/${id}/`);
 }
+
+// --- Movimientos ---
+// src/services/api.js
+export const getMovimientos = (params = {}) =>
+  api.get("/movimientos/", { params });
+
+export const crearMovimiento = (payload) =>
+  api.post("/movimientos/", payload);
+
+// --- Admin: Usuarios ---
+export const getAdminUsers = (params = {}) =>
+  api.get("/admin/users/", { params });
+
+export const updateUserRole = (userId, role) =>
+  api.patch(`/admin/users/${userId}/role/`, { role });
+
+// ---------- ADMIN DASHBOARD ----------
+export const getAdminDashboard = () => api.get("/admin/dashboard/");
+
+// --- Notificaciones In-App ---
+export const getNotificacionesResumen = () =>
+  api.get("/notificaciones/resumen/");
+
+export const marcarNotificacionLeida = (id) =>
+  api.patch(`/notificaciones/${id}/leer/`);
+
+export const marcarTodasNotificacionesLeidas = () =>
+  api.post("/notificaciones/marcar_todas_leidas/");
+
+export const getNotificaciones = () =>
+  api.get("/notificaciones/").then(r => r.data);
+
+export const leerNotificacion = (id) =>
+  api.patch(`/notificaciones/${id}/leer/`).then(r => r.data);
+
+export const marcarTodasLeidas = () =>
+  api.post("/notificaciones/marcar_todas_leidas/").then(r => r.data);

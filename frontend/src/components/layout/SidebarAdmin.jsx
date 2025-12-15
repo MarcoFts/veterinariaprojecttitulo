@@ -4,8 +4,10 @@ import {
   LayoutDashboard,
   Package,
   ClipboardList,
+  ArrowLeftRight,
   LogOut,
   ShieldCheck,
+  Users, // ✅ nuevo icono
 } from "lucide-react";
 import { logout } from "../../auth";
 
@@ -56,10 +58,20 @@ export default function SidebarAdmin() {
             Inventario
           </NavLink>
 
-          {/* Movimientos queda preparado pero NO obligatorio */}
-          <NavLink to="/admin/movimientos" className={linkClass}>
+          <NavLink to="/admin/motivos" className={linkClass}>
             <ClipboardList className="h-4 w-4" />
+            Motivos de consulta
+          </NavLink>
+
+          <NavLink to="/admin/movimientos" className={linkClass}>
+            <ArrowLeftRight className="h-4 w-4" />
             Movimientos
+          </NavLink>
+
+          {/* ✅ NUEVO: Usuarios */}
+          <NavLink to="/admin/usuarios" className={linkClass}>
+            <Users className="h-4 w-4" />
+            Usuarios
           </NavLink>
         </nav>
 

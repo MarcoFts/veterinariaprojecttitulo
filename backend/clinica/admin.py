@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Cliente, Cita, Mascota, Producto, MovimientoInventario, Veterinario
+from .models import Cliente, Cita, Mascota, Producto, MovimientoInventario, Veterinario, Notificacion
 
 
 # ----------------------------
@@ -117,3 +117,9 @@ class VeterinarioAdmin(admin.ModelAdmin):
         "n_registro",
     )
     list_filter = ("especialidad", "trabaja_con_vacunas", "trabaja_con_cirugias")
+
+@admin.register(Notificacion)
+class NotificacionAdmin(admin.ModelAdmin):
+    list_display = ("id", "usuario", "titulo", "tipo", "leida", "creada_en")
+    list_filter = ("tipo", "leida")
+    search_fields = ("titulo", "mensaje", "usuario__email")

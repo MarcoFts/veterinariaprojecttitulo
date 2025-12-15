@@ -1,14 +1,19 @@
 # backend/clinica/serializers.py  
 from __future__ import annotations
-
+from django.contrib.auth.models import Group
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-
+from .notificaciones import notificar_cliente_registro_clinico
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+from clinica.notificaciones import (
+    notificar_cliente_registro_clinico,
+    notificar_cliente_de_cita,
+    notificar_vet_de_cita,
+)
 
 from .models import (
     Cliente,
@@ -22,6 +27,7 @@ from .models import (
     RegistroClinico,
     MotivoConsulta,
     Veterinario,
+    Notificacion,
 )
 
 User = get_user_model()
@@ -601,8 +607,13 @@ class RegistroClinicoProductoSerializer(serializers.ModelSerializer):
         ]
 
 class RegistroClinicoSerializer(serializers.ModelSerializer):
-    # para lectura (GET)
     items_tratamiento = RegistroClinicoProductoSerializer(many=True, read_only=True)
+    items_tratamiento_in = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False
+    )
+
     veterinario_nombre = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -620,13 +631,13 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
             "evolucion",
             "notas",
             "creado_en",
-            "veterinario",          # <- para que quede claro que existe la FK
-            "veterinario_nombre",   # solo lectura
-            "items_tratamiento",
+            "veterinario",
+            "veterinario_nombre",
+            "items_tratamiento",      
+            "items_tratamiento_in",   
         ]
         read_only_fields = ["veterinario", "veterinario_nombre", "fecha", "creado_en"]
 
-    # ---- helpers ----
     def get_veterinario_nombre(self, obj):
         if not getattr(obj, "veterinario", None):
             return None
@@ -634,10 +645,6 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         return full or obj.veterinario.email or obj.veterinario.username
 
     def _user_is_vet(self, user):
-        """
-        Misma lógica que user_is_vet() de views.py,
-        pero local para evitar import circular.
-        """
         if not user or not user.is_authenticated:
             return False
         if getattr(user, "is_veterinario", False):
@@ -646,33 +653,26 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        """
-        - El veterinario se toma del usuario logueado.
-        - Solo veterinarios / staff / superuser pueden crear.
-        - Si viene una cita asociada, la marca como 'atendida'.
-        - Si vienen productos en items_tratamiento, se validan y se generan
-          movimientos de inventario (salida).
-        """
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
         if not user or not user.is_authenticated:
             raise serializers.ValidationError({"detail": "Usuario no autenticado."})
 
-        # ---- PERMISOS: misma lógica que en views.user_is_vet ----
         if not (self._user_is_vet(user) or user.is_staff or user.is_superuser):
             raise serializers.ValidationError(
                 {"detail": "No tienes permisos para crear registros clínicos."}
             )
 
-        # Asignar veterinario automáticamente (FK al User)
         validated_data["veterinario"] = user
 
-        # Guardar referencia a cita (si viene)
         cita = validated_data.get("cita", None)
 
-        # Leer items_tratamiento DESDE el request (puede venir como lista o JSON string)
-        raw_items = request.data.get("items_tratamiento", [])
+        #  items desde validated_data, con fallback
+        raw_items = validated_data.pop("items_tratamiento_in", None)
+        if raw_items is None:
+            raw_items = request.data.get("items_tratamiento", [])
+
         if isinstance(raw_items, str):
             import json
             try:
@@ -716,10 +716,8 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
         if errores_stock:
             raise serializers.ValidationError({"items_tratamiento": errores_stock})
 
-        # Crear el registro clínico
         registro = super().create(validated_data)
 
-        # Crear líneas de tratamiento + movimientos de inventario
         for item in productos_a_usar:
             producto = item["producto"]
             cantidad = item["cantidad"]
@@ -739,15 +737,28 @@ class RegistroClinicoSerializer(serializers.ModelSerializer):
                 motivo=f"Uso en registro clínico #{registro.pk}",
             )
 
-        # Si había una cita asociada, marcarla como atendida
-        if cita is not None:
+        if cita is not None and isinstance(cita, Cita):
             try:
-                if isinstance(cita, Cita):
-                    cita.estado = "atendida"
-                    cita.save(update_fields=["estado"])
+                cita.estado = "atendida"
+                cita.save(update_fields=["estado"])
             except Exception:
                 pass
 
+        try:
+            notificar_cliente_registro_clinico(registro)
+        except Exception:
+            pass
+
+        if cita is not None and isinstance(cita, Cita):
+            try:
+                notificar_cliente_de_cita(cita, "atendida")
+            except Exception:
+                pass
+            try:
+                notificar_vet_de_cita(cita, "atendida")
+            except Exception:
+                pass
+                
         return registro
 
 # ---------- Inventario ----------
@@ -810,10 +821,24 @@ class ProductoSerializer(serializers.ModelSerializer):
             )
         return value
 class MovimientoInventarioSerializer(serializers.ModelSerializer):
+    producto_nombre = serializers.CharField(source="producto.nombre", read_only=True)
+    producto_codigo = serializers.CharField(source="producto.codigo", read_only=True)
+    producto_categoria = serializers.CharField(source="producto.categoria", read_only=True)
+
     class Meta:
         model = MovimientoInventario
-        fields = "__all__"
-        read_only_fields = ["fecha"]
+        fields = [
+            "id",
+            "producto",
+            "producto_nombre",
+            "producto_codigo",
+            "producto_categoria",
+            "tipo",
+            "cantidad",
+            "motivo",
+            "fecha",
+        ]
+        read_only_fields = ["id", "fecha", "producto_nombre", "producto_codigo", "producto_categoria"]
 
     def validate_cantidad(self, value):
         if value is None:
@@ -833,13 +858,14 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
 
         if not producto:
             raise serializers.ValidationError({"producto": "Producto es obligatorio."})
+
         if tipo not in ["ingreso", "salida"]:
             raise serializers.ValidationError({"tipo": "Tipo inválido."})
 
-        # Evitar stock negativo en salidas
+        # Evitar stock negativo al crear salidas
         if tipo == "salida":
-            stock_actual = producto.stock or 0
-            if cantidad and stock_actual < cantidad:
+            stock_actual = int(producto.stock or 0)
+            if cantidad and stock_actual < int(cantidad):
                 raise serializers.ValidationError(
                     {"cantidad": f"Stock insuficiente. Disponible {stock_actual}."}
                 )
@@ -848,36 +874,14 @@ class MovimientoInventarioSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        producto = validated_data.get("producto")
-        if not producto:
-            raise serializers.ValidationError({"producto": "Producto es obligatorio."})
-
-        # Bloquea el producto para evitar carreras
-        producto = Producto.objects.select_for_update().get(pk=producto.pk)
-        tipo = validated_data.get("tipo")
-        cantidad = int(validated_data.get("cantidad") or 0)
-
-        if tipo == "salida":
-            stock_actual = int(producto.stock or 0)
-            if stock_actual < cantidad:
-                raise serializers.ValidationError(
-                    {"cantidad": f"Stock insuficiente. Disponible: {stock_actual}."}
-                )
-
-        validated_data["producto"] = producto
-        return super().create(validated_data)
-
-
-    @transaction.atomic
-    def create(self, validated_data):
         """
         Bloquea el producto para evitar condiciones de carrera.
-        El ajuste real de stock lo hace el model.save() al crear el movimiento.
+        El ajuste real lo hace MovimientoInventario.save() cuando se crea.
         """
         producto = validated_data["producto"]
+        # lock
         Producto.objects.select_for_update().filter(pk=producto.pk).first()
         return super().create(validated_data)
-
 
 class InventarioSerializer(serializers.Serializer):
     stock_bajo = ProductoSerializer(many=True)
@@ -990,3 +994,54 @@ class MotivoConsultaSerializer(serializers.ModelSerializer):
             validated_data["creado_por"] = request.user
         return super().create(validated_data)
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    roles = serializers.SerializerMethodField()
+    has_cliente = serializers.SerializerMethodField()
+    has_veterinario = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "full_name",
+            "is_staff",
+            "is_superuser",
+            "roles",
+            "has_cliente",
+            "has_veterinario",
+            "is_active",
+            "date_joined",
+        ]
+
+    def get_full_name(self, obj):
+        full = f"{obj.first_name} {obj.last_name}".strip()
+        return full or obj.email or obj.username
+
+    def get_roles(self, obj):
+        groups = list(obj.groups.values_list("name", flat=True))
+        return groups
+
+    def get_has_cliente(self, obj):
+        return hasattr(obj, "cliente") and obj.cliente is not None
+
+    def get_has_veterinario(self, obj):
+        return hasattr(obj, "veterinario") and obj.veterinario is not None
+    
+class NotificacionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notificacion
+        fields = [
+            "id",
+            "titulo",
+            "mensaje",
+            "tipo",
+            "url",
+            "leida",
+            "creada_en",
+        ]
+        read_only_fields = ["id", "creada_en"]

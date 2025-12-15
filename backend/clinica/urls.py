@@ -2,7 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from clinica.auth_views import EmailTokenObtainPairView
-from .views import UpdateVetProfileView
+
 from .views import (
     disponibilidad,
     veterinarios,
@@ -15,16 +15,21 @@ from .views import (
     InventarioViewSet,
     me,
     RegistroClinicoViewSet,
-    MotivoConsultaListCreateAPIView,
     ReporteAgendaView,
     ReporteInventarioView,
     UpdateVetProfileView,
     ClienteProfileView,
+    MotivoConsultaViewSet,
+    MovimientoInventarioViewSet,
+    AdminUsersListView, 
+    AdminUserRoleUpdateView,
+    AdminDashboardView,
+    NotificacionViewSet,
 )
 
 # Vistas de autenticación
 from .auth_views import (
-    LoginView,          # si no lo usas lo puedes borrar
+    LoginView,  # si no lo usas lo puedes borrar
     RegisterView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
@@ -42,6 +47,11 @@ router.register(r"inventario", InventarioViewSet, basename="inventario")
 router.register(r"horarios", HorarioAtencionViewSet, basename="horario")
 router.register(r"bloqueos", BloqueoAgendaViewSet, basename="bloqueo")
 router.register(r"registros-clinicos", RegistroClinicoViewSet, basename="registro-clinico")
+router.register(r"movimientos", MovimientoInventarioViewSet, basename="movimientos")
+router.register(r"motivos-consulta", MotivoConsultaViewSet, basename="motivos-consulta")
+router.register(r"notificaciones", NotificacionViewSet, basename="notificaciones")
+
+
 
 # -----------------------------
 # URLS PRINCIPALES
@@ -56,12 +66,10 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="me"),
     path("api/auth/me/update/", UpdateVetProfileView.as_view(), name="update_vet_profile"),
+
     # Perfil cliente
-    path(
-        "api/auth/cliente/profile/",
-        ClienteProfileView.as_view(),
-        name="cliente_profile",
-    ),
+    path("api/auth/cliente/profile/", ClienteProfileView.as_view(), name="cliente_profile"),
+
     # Recuperación de contraseña
     path("api/auth/password-reset/", PasswordResetRequestView.as_view(), name="password_reset"),
     path("api/auth/password-reset-confirm/<uidb64>/<token>/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
@@ -69,17 +77,12 @@ urlpatterns = [
     # Funcionalidades de agenda y veterinarios
     path("api/agenda/disponibilidad/", disponibilidad, name="agenda-disponibilidad"),
     path("api/veterinarios/", veterinarios, name="veterinarios"),
-     # Motivos de consulta (predefinidos)
-    path("api/motivos-consulta/", MotivoConsultaListCreateAPIView.as_view(), name="motivos-consulta"),
-        # Reportes de gestión
-    path(
-        "api/reportes/agenda/",
-        ReporteAgendaView.as_view(),
-        name="reporte-agenda",
-    ),
-        path(
-        "api/reportes/inventario/",
-        ReporteInventarioView.as_view(),
-        name="reporte-inventario",
-    ),
+
+    # Reportes de gestión
+    path("api/reportes/agenda/", ReporteAgendaView.as_view(), name="reporte-agenda"),
+    path("api/reportes/inventario/", ReporteInventarioView.as_view(), name="reporte-inventario"),
+
+    path("api/admin/users/", AdminUsersListView.as_view(), name="admin_users_list"),
+    path("api/admin/users/<int:user_id>/role/", AdminUserRoleUpdateView.as_view(), name="admin_user_role_update"),
+    path("admin/dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
 ]

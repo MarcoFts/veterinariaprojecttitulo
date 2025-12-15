@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
 import {
-  Package,
   Plus,
   Trash2,
   AlertTriangle,
+  SlidersHorizontal,
+  ClipboardList,
 } from "lucide-react";
 
-import {
-  getProductos,
-  eliminarProducto,
-} from "../../services/api";
+import { getProductos, eliminarProducto } from "../../services/api";
 
-// MODALS (YA EXISTEN, NO LOS TOCO)
+// MODALS existentes
 import ModalAgregarProducto from "../../components/modals/ModalAgregarProducto";
 import ModalEliminarProducto from "../../components/modals/ModalEliminarProducto";
+
+// NUEVO modal
+import ModalAjustarStock from "../../components/modals/ModalAjustarStock";
 
 export default function AdminInventario() {
   const [productos, setProductos] = useState([]);
@@ -23,6 +24,10 @@ export default function AdminInventario() {
   // ---------- MODALS ----------
   const [openAgregar, setOpenAgregar] = useState(false);
   const [productoEliminar, setProductoEliminar] = useState(null);
+
+  // Ajuste stock
+  const [openAjuste, setOpenAjuste] = useState(false);
+  const [productoAjuste, setProductoAjuste] = useState(null);
 
   // ---------------- CARGAR PRODUCTOS ----------------
   const cargarProductos = async () => {
@@ -50,9 +55,7 @@ export default function AdminInventario() {
 
     try {
       await eliminarProducto(productoEliminar.id);
-      setProductos((prev) =>
-        prev.filter((p) => p.id !== productoEliminar.id)
-      );
+      setProductos((prev) => prev.filter((p) => p.id !== productoEliminar.id));
       setProductoEliminar(null);
     } catch (e) {
       console.error("Error eliminando producto:", e);
@@ -60,36 +63,45 @@ export default function AdminInventario() {
     }
   };
 
+  const abrirAjusteStock = (p) => {
+    setProductoAjuste(p);
+    setOpenAjuste(true);
+  };
+
   return (
     <div className="space-y-8">
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            Inventario
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900">Inventario</h1>
           <p className="text-sm text-slate-600">
             Gestión de productos y stock del sistema.
           </p>
         </div>
 
-        <button
-          onClick={() => setOpenAgregar(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo producto
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/admin/movimientos"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition"
+          >
+            <ClipboardList className="h-4 w-4" />
+            Movimientos
+          </a>
+
+          <button
+            onClick={() => setOpenAgregar(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo producto
+          </button>
+        </div>
       </div>
 
       {/* ESTADOS */}
-      {loading && (
-        <p className="text-sm text-slate-500">Cargando inventario...</p>
-      )}
+      {loading && <p className="text-sm text-slate-500">Cargando inventario...</p>}
 
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && productos.length === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">
@@ -107,6 +119,9 @@ export default function AdminInventario() {
                   Producto
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                  Categoría
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700">
                   Stock
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-slate-700">
@@ -121,7 +136,9 @@ export default function AdminInventario() {
 
             <tbody>
               {productos.map((p) => {
-                const stockBajo = p.stock <= p.stock_minimo;
+                const stock = Number(p.stock ?? 0);
+                const min = Number(p.stock_minimo ?? 0);
+                const stockBajo = min > 0 && stock <= min;
 
                 return (
                   <tr
@@ -130,15 +147,16 @@ export default function AdminInventario() {
                   >
                     <td className="px-4 py-3 font-medium text-slate-800">
                       {p.nombre}
+                      {p.codigo ? (
+                        <div className="text-xs text-slate-500">Código: {p.codigo}</div>
+                      ) : null}
                     </td>
 
-                    <td className="px-4 py-3">
-                      {p.stock}
-                    </td>
+                    <td className="px-4 py-3 capitalize">{p.categoria}</td>
 
-                    <td className="px-4 py-3">
-                      {p.stock_minimo}
-                    </td>
+                    <td className="px-4 py-3 font-semibold">{stock}</td>
+
+                    <td className="px-4 py-3">{min}</td>
 
                     <td className="px-4 py-3">
                       {stockBajo ? (
@@ -147,20 +165,28 @@ export default function AdminInventario() {
                           Bajo
                         </span>
                       ) : (
-                        <span className="text-xs font-semibold text-emerald-700">
-                          OK
-                        </span>
+                        <span className="text-xs font-semibold text-emerald-700">OK</span>
                       )}
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setProductoEliminar(p)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Eliminar
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => abrirAjusteStock(p)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900"
+                        >
+                          <SlidersHorizontal className="h-4 w-4" />
+                          Ajustar stock
+                        </button>
+
+                        <button
+                          onClick={() => setProductoEliminar(p)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -177,7 +203,7 @@ export default function AdminInventario() {
           onClose={() => setOpenAgregar(false)}
           onCreated={() => {
             setOpenAgregar(false);
-            cargarProductos(); // refleja cambios también en VetInventario
+            cargarProductos();
           }}
         />
       )}
@@ -187,6 +213,21 @@ export default function AdminInventario() {
           producto={productoEliminar}
           onClose={() => setProductoEliminar(null)}
           onConfirm={confirmarEliminar}
+        />
+      )}
+
+      {openAjuste && productoAjuste && (
+        <ModalAjustarStock
+          open={openAjuste}
+          producto={productoAjuste}
+          onClose={() => {
+            setOpenAjuste(false);
+            setProductoAjuste(null);
+          }}
+          onSaved={() => {
+            // refresca stock en tabla
+            cargarProductos();
+          }}
         />
       )}
     </div>

@@ -1,187 +1,130 @@
-// frontend/src/components/modals/ModalEditarProducto.jsx
 import { useEffect, useState } from "react";
-import { X, Pencil } from "lucide-react";
-import { actualizarProducto } from "../../services/api";
+import { X } from "lucide-react";
 
-export default function ModalEditarProducto({
-  open,
-  producto,
-  onClose,
-  onUpdated,
-}) {
+export default function ModalEditarProducto({ open, onClose, producto, onSave }) {
   const [form, setForm] = useState({
     nombre: "",
+    categoria: "",
     codigo: "",
-    stock: 0,
+    laboratorio: "",
+    lote: "",
     stock_minimo: 0,
     fecha_vencimiento: "",
   });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (open && producto) {
-      setForm({
-        nombre: producto.nombre || "",
-        codigo: producto.codigo || "",
-        stock: producto.stock ?? 0,
-        stock_minimo: producto.stock_minimo ?? 0,
-        fecha_vencimiento: producto.fecha_vencimiento || "",
-      });
-      setError("");
-    }
-  }, [open, producto]);
+    if (!producto) return;
+    setForm({
+      nombre: producto.nombre || "",
+      categoria: producto.categoria || "",
+      codigo: producto.codigo || "",
+      laboratorio: producto.laboratorio || "",
+      lote: producto.lote || "",
+      stock_minimo: producto.stock_minimo ?? 0,
+      fecha_vencimiento: producto.fecha_vencimiento || "",
+    });
+  }, [producto]);
 
-  if (!open || !producto) return null;
+  if (!open) return null;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: name === "stock" || name === "stock_minimo" ? Number(value || 0) : value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError("");
-    try {
-      const payload = {
-        nombre: form.nombre.trim(),
-        codigo: form.codigo.trim() || null,
-        stock: Number(form.stock) || 0,
-        stock_minimo: Number(form.stock_minimo) || 0,
-        fecha_vencimiento: form.fecha_vencimiento || null,
-      };
-      const res = await actualizarProducto(producto.id, payload);
-      onUpdated && onUpdated(res.data);
-      onClose && onClose();
-    } catch (err) {
-      console.error("Error actualizando producto:", err);
-      setError("No se pudo actualizar el producto.");
-    } finally {
-      setSaving(false);
-    }
+    onSave(form);
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center">
-              <Pencil className="h-4 w-4 text-slate-700" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                Editar producto
-              </p>
-              <p className="text-xs text-slate-500">
-                {producto?.nombre || "Producto"}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            type="button"
-            className="p-1 rounded-full hover:bg-slate-100 text-slate-500"
-          >
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl border border-slate-200">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h3 className="font-bold text-slate-900">Editar producto</h3>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-5 py-4 space-y-3 text-sm">
-          {error && (
-            <div className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-700">
-              Nombre del producto
-            </label>
+        <form onSubmit={submit} className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-600">Nombre</label>
             <input
-              type="text"
-              name="nombre"
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
               value={form.nombre}
-              onChange={handleChange}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-              required
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-700">
-              Código (opcional)
-            </label>
+          <div>
+            <label className="text-xs text-slate-600">Categoría</label>
             <input
-              type="text"
-              name="codigo"
-              value={form.codigo}
-              onChange={handleChange}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={form.categoria}
+              onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-700">
-                Stock
-              </label>
-              <input
-                type="number"
-                min="0"
-                name="stock"
-                value={form.stock}
-                onChange={handleChange}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-700">
-                Stock mínimo
-              </label>
-              <input
-                type="number"
-                min="0"
-                name="stock_minimo"
-                value={form.stock_minimo}
-                onChange={handleChange}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
-            </div>
+          <div>
+            <label className="text-xs text-slate-600">Código</label>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={form.codigo}
+              onChange={(e) => setForm((f) => ({ ...f, codigo: e.target.value }))}
+            />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-700">
-              Fecha de vencimiento (opcional)
-            </label>
+          <div>
+            <label className="text-xs text-slate-600">Laboratorio</label>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={form.laboratorio}
+              onChange={(e) => setForm((f) => ({ ...f, laboratorio: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-600">Lote</label>
+            <input
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={form.lote}
+              onChange={(e) => setForm((f) => ({ ...f, lote: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-600">Stock mínimo</label>
+            <input
+              type="number"
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              value={form.stock_minimo}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, stock_minimo: Number(e.target.value || 0) }))
+              }
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-600">Fecha vencimiento</label>
             <input
               type="date"
-              name="fecha_vencimiento"
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
               value={form.fecha_vencimiento || ""}
-              onChange={handleChange}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+              onChange={(e) =>
+                setForm((f) => ({ ...f, fecha_vencimiento: e.target.value }))
+              }
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="md:col-span-2 flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              className="rounded-xl border px-4 py-2 text-sm font-semibold"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+              className="rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-semibold"
             >
-              {saving ? "Guardando..." : "Guardar cambios"}
+              Guardar cambios
             </button>
           </div>
         </form>

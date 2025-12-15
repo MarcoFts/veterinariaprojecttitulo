@@ -38,6 +38,9 @@ import ConfigMotivosConsulta from "./pages/veterinario/ConfigMotivosConsultas";
 import LayoutAdmin from "./components/layout/LayoutAdmin";
 import AdminHome from "./pages/administrador/AdminHome";
 import AdminInventario from "./pages/administrador/AdminInventario";
+import AdminMotivos from "./pages/administrador/AdminMotivos";
+import AdminMovimientos from "./pages/administrador/AdminMovimientos";
+import AdminUsuarios from "./pages/administrador/AdminUsuarios";
 
 function App() {
   return (
@@ -186,12 +189,14 @@ function App() {
           </VetRoute>
         }
       />
-
       {/* ================= ADMIN ================= */}
       <Route element={<AdminRoute />}>
         <Route path="/admin" element={<LayoutAdmin />}>
           <Route path="home" element={<AdminHome />} />
           <Route path="inventario" element={<AdminInventario />} />
+          <Route path="movimientos" element={<AdminMovimientos />} />
+          <Route path="motivos" element={<AdminMotivos />} />
+          <Route path="usuarios" element={<AdminUsuarios />} /> 
         </Route>
       </Route>
 
