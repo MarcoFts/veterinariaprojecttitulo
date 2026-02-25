@@ -18,10 +18,12 @@ export const getToken = getAccessToken;
 export const getRefresh = getRefreshToken;
 
 // Logout limpio
-export const logout = () => {
+export const clearTokens = () => {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
 };
+
+export const logout = clearTokens;
 
 // Estado auth simple
 export const isAuthenticated = () => Boolean(getAccessToken());

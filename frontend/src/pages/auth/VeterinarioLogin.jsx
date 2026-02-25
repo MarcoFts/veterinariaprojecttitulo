@@ -1,11 +1,14 @@
+// src/pages/auth/VeterinarioLogin.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { setTokens, logout } from "../../auth"; // ajusta ruta si auth.js está en otro lado
-import api from "../../services/api"; // si tu api.js exporta axios instance default
-// Si NO tienes ese api, más abajo te dejo versión con fetch
+import { setTokens, logout } from "../../auth";
+import api from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 export default function VeterinarioLogin() {
   const navigate = useNavigate();
+  const { login: setAuthUser } = useAuth();
+
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,7 @@ export default function VeterinarioLogin() {
     setLoading(true);
 
     try {
-      // 1) Login real
+      // 1) Login contra el backend
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
@@ -39,28 +42,41 @@ export default function VeterinarioLogin() {
       // 2) Guardar tokens
       setTokens({ access: data.access, refresh: data.refresh });
 
-      // 3) Traer usuario para validar rol
+      // 3) Obtener perfil /auth/me/
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
+      console.log("Respuesta /auth/me/ (vet):", me);
 
-      // Ajusta esta validación según tu backend:
       const esVeterinario =
+        me?.is_vet === true ||
         me?.is_veterinario === true ||
-        me?.rol === "veterinario" ||
-        me?.tipo === "veterinario" ||
-        me?.is_staff === true;
+        me?.is_staff === true ||
+        me?.is_superuser === true;
 
       if (!esVeterinario) {
+        // no tiene rol de vet → limpiamos sesión
         logout();
         setError("Esta cuenta no tiene permiso de veterinario.");
         setLoading(false);
         return;
       }
 
-      // 4) Redirigir
+      // 4) Guardar usuario en el AuthContext
+      const userParaContexto = {
+        id: me.id,
+        email: me.email || form.email,
+        nombre: me.name || `${me.first_name || ""} ${me.last_name || ""}`.trim(),
+        rol: "veterinario",
+        is_vet: me.is_vet,
+        is_staff: me.is_staff,
+      };
+
+      setAuthUser(userParaContexto, data.access);
+
+      // 5) Navegar al home del veterinario
       navigate("/veterinario/home", { replace: true });
     } catch (err) {
-      // Errores típicos DRF
+      console.error("Error en login veterinario:", err?.response?.data || err);
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||
@@ -77,7 +93,7 @@ export default function VeterinarioLogin() {
         {/* ENCABEZADO */}
         <div className="mb-6 text-center">
           <p className="text-xs font-semibold tracking-[0.25em] uppercase text-blue-600 mb-2">
-            VETCARE · VETERINARIO
+            Vetyon · VETERINARIO
           </p>
           <h1 className="text-2xl font-bold text-slate-900">
             Iniciar sesión como Veterinario
@@ -98,13 +114,17 @@ export default function VeterinarioLogin() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* EMAIL */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-slate-700"
+            >
               Correo institucional
             </label>
             <input
               id="email"
               name="email"
               type="email"
+              autoComplete="email"
               value={form.email}
               onChange={handleChange}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 
@@ -116,13 +136,17 @@ export default function VeterinarioLogin() {
 
           {/* PASSWORD */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-slate-700"
+            >
               Contraseña
             </label>
             <input
               id="password"
               name="password"
               type="password"
+              autoComplete="current-password"
               value={form.password}
               onChange={handleChange}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-slate-50 

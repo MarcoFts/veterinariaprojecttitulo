@@ -1,22 +1,71 @@
-import { useNavigate, Link, useLocation } from "react-router-dom";
+// frontend/src/components/layout/SidebarVet.jsx
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Home,
   CalendarDays,
-  PawPrint,
+  CalendarCheck,
+  Users2,
   ClipboardList,
+  ClipboardCheck,
+  Boxes,
   Settings,
   User,
   Stethoscope,
   LogOut,
+  BarChart2,
 } from "lucide-react";
-import { logout } from "../../auth"; // ajusta ruta si auth.js está en otro lado
+import { logout } from "../../auth";
 
 const sections = [
   { id: "home", label: "Inicio", description: "Resumen general", icon: Home },
-  { id: "agenda", label: "Agenda", description: "Disponibilidad y horas", icon: CalendarDays },
-  { id: "mascotas", label: "Mascotas", description: "Mascotas y dueños", icon: PawPrint }, // ← CORREGIDO
-  { id: "citas", label: "Citas", description: "Historial de reservas", icon: ClipboardList },
-  { id: "config", label: "Preferencias", description: "Datos y ajustes", icon: Settings },
+  {
+    id: "agenda",
+    label: "Agenda",
+    description: "Disponibilidad y horas",
+    icon: CalendarDays,
+  },
+  {
+    id: "agenda-dia",
+    label: "Agenda del día",
+    description: "Citas del día",
+    icon: CalendarCheck,
+  },
+  {
+    id: "pacientes",
+    label: "Pacientes",
+    description: "Fichas clínicas",
+    icon: Users2,
+  },
+  {
+    id: "citas",
+    label: "Citas",
+    description: "Historial de reservas",
+    icon: ClipboardList,
+  },
+  {
+    id: "inventario",
+    label: "Inventario",
+    description: "Productos y stock",
+    icon: Boxes,
+  },
+  {
+    id: "reportes",
+    label: "Reportes",
+    description: "Indicadores y gestión", 
+    icon: BarChart2,
+  },
+  {
+    id: "config-motivos",
+    label: "Motivos consulta",
+    description: "Crear y editar motivos",
+    icon: ClipboardCheck,
+  },
+  {
+    id: "perfil",
+    label: "Mi perfil",
+    description: "Datos del veterinario",
+    icon: User,
+  },
 ];
 
 export default function SidebarVet() {
@@ -25,22 +74,21 @@ export default function SidebarVet() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    navigate("/login/veterinario", { replace: true });
   };
 
-  // ruta activa real: /veterinario/home, /veterinario/agenda, etc.
   const isActive = (id) => location.pathname === `/veterinario/${id}`;
 
   return (
     <aside
       className="
-        hidden md:flex flex-col 
-        bg-white/95 backdrop-blur-sm shadow-sm border-r border-slate-200 
-        h-full w-64
-      "
+      hidden md:flex flex-col 
+      bg-white/95 backdrop-blur-sm shadow-sm border-r border-slate-200 
+      h-full w-64
+    "
     >
       <div className="flex flex-col h-full">
-        {/* TOP (LOGO) */}
+        {/* TOP */}
         <div className="flex items-center px-4 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 flex items-center justify-center shadow-md">
@@ -48,48 +96,44 @@ export default function SidebarVet() {
             </div>
 
             <div className="origin-left">
-              <p className="text-sm font-semibold text-slate-900">VetCare</p>
+              <p className="text-sm font-semibold text-slate-900">Vetyon</p>
               <p className="text-xs text-slate-500 -mt-0.5">Panel Veterinario</p>
             </div>
           </div>
         </div>
 
-        {/* MENÚ */}
+        {/* MENU */}
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1 flex flex-col">
-          <div className="flex flex-col gap-1">
-            {sections.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.id);
+          {sections.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.id);
 
-              return (
-                <Link
-                  key={item.id}
-                  to={`/veterinario/${item.id}`}
-                  className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all duration-150 ${
-                    active
-                      ? "bg-sky-50 text-sky-700 border border-sky-200 shadow-sm"
-                      : "text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {/* ICONO */}
-                  <div className="flex items-center justify-center h-8 w-8 shrink-0">
-                    <Icon
-                      size={20}
-                      className={active ? "text-sky-700" : "text-slate-600"}
-                    />
-                  </div>
+            return (
+              <Link
+                key={item.id}
+                to={`/veterinario/${item.id}`}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all duration-150 ${
+                  active
+                    ? "bg-sky-50 text-sky-700 border border-sky-200 shadow-sm"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <div className="flex items-center justify-center h-8 w-8 shrink-0">
+                  <Icon
+                    size={20}
+                    className={active ? "text-sky-700" : "text-slate-600"}
+                  />
+                </div>
 
-                  {/* TEXTO */}
-                  <div className="flex flex-col overflow-hidden">
-                    <span className="font-medium">{item.label}</span>
-                    <span className="text-[11px] text-slate-500">
-                      {item.description}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                <div className="flex flex-col overflow-hidden">
+                  <span className="font-medium">{item.label}</span>
+                  <span className="text-[11px] text-slate-500">
+                    {item.description}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </nav>
 
         {/* FOOTER */}

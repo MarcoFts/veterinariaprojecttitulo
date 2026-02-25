@@ -1,0 +1,1010 @@
+// src/pages/veterinario/VetAgendaDia.jsx
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import LayoutVet from "../../components/layout/LayoutVet";
+import ModalCrearCita from "../../components/modals/ModalCrearCita";
+import ModalReprogramarCita from "../../components/modals/ModalReprogramarCitaVet";
+import {
+  me as getUserProfile,
+  getDisponibilidad,
+  getCitas,
+  confirmarCita,
+  getClientes,
+  cancelarCita,
+  atenderCita,
+  marcarNoAsistida,
+} from "../../services/api";
+
+import dayjs from "dayjs";
+import "dayjs/locale/es";
+dayjs.locale("es");
+
+const todayStr = () => dayjs().format("YYYY-MM-DD");
+
+// Suma minutos a "HH:MM" y devuelve "HH:MM"
+const sumarMinutos = (horaStr, minutos) => {
+  const [h, m] = horaStr.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m + minutos, 0, 0);
+  return d.toTimeString().slice(0, 5);
+};
+
+export default function VetAgendaDia() {
+  const [fecha, setFecha] = useState(todayStr()); // día seleccionado para el encabezado
+  const [weekOffset, setWeekOffset] = useState(0); // desplazamiento de la semana
+
+  const [slots, setSlots] = useState([]); // todos los slots de la semana (cada uno con fecha)
+  const [horas, setHoras] = useState([]); // filas del calendario (09:00, 09:30, ...)
+
+  const [slotParaAsignar, setSlotParaAsignar] = useState(null);
+  const [citaParaReprogramar, setCitaParaReprogramar] = useState(null);
+
+  const [vetId, setVetId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const [reloadAgenda, setReloadAgenda] = useState(0);
+
+  // mapa idCliente -> nombre (Marco Fuentes, etc.)
+  const [clientesMap, setClientesMap] = useState({});
+
+  // cita seleccionada para abrir modal de acciones
+  const [citaAcciones, setCitaAcciones] = useState(null);
+
+  // modal confirmar cita
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [citaAConfirmar, setCitaAConfirmar] = useState(null);
+  const [boxConfirm, setBoxConfirm] = useState("");
+  const [savingConfirm, setSavingConfirm] = useState(false);
+
+  // tira de días de la semana visible
+  const upcomingDays = useMemo(() => {
+    const base = dayjs().add(weekOffset, "day");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = base.add(i, "day");
+      return {
+        value: d.format("YYYY-MM-DD"),
+        dia: d.format("DD"),
+        dow: d.format("ddd"),
+      };
+    });
+  }, [weekOffset]);
+
+  const currentWeekLabel = useMemo(() => {
+    const base = dayjs().add(weekOffset, "day");
+    const end = base.add(6, "day");
+    return `${base.format("DD MMM")} – ${end.format("DD MMM YYYY")}`;
+  }, [weekOffset]);
+
+  const handleSelectDia = (value) => setFecha(value);
+
+  const handleWeekNav = (direction) =>
+    setWeekOffset((prev) => prev + (direction === "next" ? 7 : -7));
+
+  const abrirConfirmar = (slot) => {
+    if (!slot.citaId) return;
+    setCitaAConfirmar(slot);
+    setBoxConfirm(slot.box || "");
+    setShowConfirmModal(true);
+  };
+
+  const cerrarConfirmar = () => {
+    setShowConfirmModal(false);
+    setCitaAConfirmar(null);
+    setBoxConfirm("");
+  };
+
+  const handleConfirmarCita = async (e) => {
+    e.preventDefault();
+    if (!citaAConfirmar) return;
+
+    setSavingConfirm(true);
+    try {
+      await confirmarCita(citaAConfirmar.citaId, {
+        estado: "confirmada",
+        box: boxConfirm || null,
+      });
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === citaAConfirmar.id
+            ? {
+                ...s,
+                estadoCita: "confirmada",
+                estado: "ocupada",
+                box: boxConfirm || null,
+              }
+            : s
+        )
+      );
+      cerrarConfirmar();
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error confirmando cita:", err);
+      setError("No se pudo confirmar la cita.");
+    } finally {
+      setSavingConfirm(false);
+    }
+  };
+
+  // cancelar en backend + refrescar estado local
+  const handleCancelarCita = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Seguro que deseas cancelar esta cita?");
+    if (!ok) return;
+
+    try {
+      await cancelarCita(slot.citaId);
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.id === slot.id
+            ? { ...s, estado: "cancelada", estadoCita: "cancelada" }
+            : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error cancelando cita:", err);
+      setError("No se pudo cancelar la cita en el servidor.");
+    }
+  };
+
+  // marcar como ATENDIDA
+  const handleMarcarAtendida = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Marcar esta cita como ATENDIDA?");
+    if (!ok) return;
+
+    try {
+      const res = await atenderCita(slot.citaId);
+      const nuevoEstado = res?.data?.estado || "atendida";
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.citaId === slot.citaId ? { ...s, estadoCita: nuevoEstado } : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error marcando cita como atendida:", err);
+      setError("No se pudo marcar la cita como atendida.");
+    }
+  };
+
+  // marcar como NO ASISTIDA
+  const handleMarcarNoAsistida = async (slot) => {
+    if (!slot?.citaId) return;
+
+    const ok = window.confirm("¿Marcar esta cita como NO ASISTIDA?");
+    if (!ok) return;
+
+    try {
+      const res = await marcarNoAsistida(slot.citaId);
+      const nuevoEstado = res?.data?.estado || "no_asistida";
+
+      setSlots((prev) =>
+        prev.map((s) =>
+          s.citaId === slot.citaId ? { ...s, estadoCita: nuevoEstado } : s
+        )
+      );
+      setReloadAgenda((n) => n + 1);
+    } catch (err) {
+      console.error("Error marcando cita como no asistida:", err);
+      setError("No se pudo marcar la cita como no asistida.");
+    }
+  };
+
+  // obtener perfil para saber vetId
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await getUserProfile();
+        if (res.data?.id) setVetId(res.data.id);
+      } catch (err) {
+        console.error("Error obteniendo perfil:", err);
+        setError("No se pudo obtener la información del veterinario.");
+      }
+    };
+    fetchUser();
+  }, []);
+
+  // cargar clientes para poder resolver nombre del dueño
+  useEffect(() => {
+    const fetchClientes = async () => {
+      try {
+        const res = await getClientes();
+        const lista = Array.isArray(res.data)
+          ? res.data
+          : res.data?.results || [];
+
+        const map = {};
+        lista.forEach((c) => {
+          map[c.id] =
+            c.nombre_completo || c.nombre || c.email || `Cliente #${c.id}`;
+        });
+
+        setClientesMap(map);
+      } catch (err) {
+        console.error("Error cargando clientes:", err);
+      }
+    };
+
+    fetchClientes();
+  }, []);
+
+  // cargar agenda de la semana (7 días) desde backend
+  useEffect(() => {
+    if (!vetId) return;
+
+    const fetchAgendaSemana = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const base = dayjs().add(weekOffset, "day");
+        const diasSemana = Array.from({ length: 7 }, (_, i) => {
+          const d = base.add(i, "day");
+          return d.format("YYYY-MM-DD");
+        });
+
+        const allSlots = [];
+        const horasSet = new Set();
+
+        for (const fechaDia of diasSemana) {
+          const [dispRes, citasRes] = await Promise.all([
+            getDisponibilidad({
+              veterinario_id: vetId,
+              fecha: fechaDia,
+              duracion: 30,
+              box: "",
+            }),
+            getCitas({ fecha: fechaDia }),
+          ]);
+
+          const libres = dispRes?.data?.slots || [];
+
+          const rawCitas = Array.isArray(citasRes.data)
+            ? citasRes.data
+            : Array.isArray(citasRes.data?.results)
+            ? citasRes.data.results
+            : [];
+
+          const citas = rawCitas.map((c) => {
+            const d = new Date(c.inicio);
+            const horaInicio = d.toTimeString().slice(0, 5);
+            const estadoCita = c.estado || "pendiente";
+
+            const motivo =
+              c.motivo ||
+              c.motivo_consulta ||
+              c.motivo_consulta_nombre ||
+              c.motivo_texto ||
+              null;
+
+            const duracion =
+              c.duracion || c.duracion_minutos || c.duracion_min || 30;
+
+            const clienteIdCrudo =
+              c.cliente_id !== undefined && c.cliente_id !== null
+                ? c.cliente_id
+                : c.cliente ?? null;
+
+            let pacienteNombre =
+              c.cliente_nombre ||
+              c.cliente_nombre_completo ||
+              c.cliente_full_name ||
+              c.cliente?.nombre_completo ||
+              c.cliente?.nombre ||
+              c.cliente?.full_name ||
+              c.mascota?.cliente_nombre ||
+              c.mascota?.cliente?.nombre_completo ||
+              c.mascota?.cliente?.nombre ||
+              null;
+
+            if (!pacienteNombre && clienteIdCrudo && clientesMap) {
+              const idNumber = Number(clienteIdCrudo);
+              if (!Number.isNaN(idNumber) && clientesMap[idNumber]) {
+                pacienteNombre = clientesMap[idNumber];
+              }
+            }
+
+            if (!pacienteNombre && clienteIdCrudo) {
+              pacienteNombre = `Cliente #${clienteIdCrudo}`;
+            }
+
+            return {
+              ...c,
+              fecha: fechaDia,
+              horaInicio,
+              horaFin: sumarMinutos(horaInicio, duracion),
+              duracion,
+              estadoCita,
+              motivo,
+              pacienteNombre,
+            };
+          });
+
+          const horasDiaSet = new Set();
+          libres.forEach((h) => horasDiaSet.add(h));
+          citas.forEach((c) => horasDiaSet.add(c.horaInicio));
+
+          const horasOrdenadasDia = Array.from(horasDiaSet).sort();
+
+          horasOrdenadasDia.forEach((hora) => {
+            horasSet.add(hora);
+
+            const cita = citas.find((c) => c.horaInicio === hora);
+
+            if (cita) {
+              const estadoCita = cita.estadoCita;
+
+              const mascotaNombre =
+                cita.mascota_nombre || cita.mascota?.nombre || null;
+
+              const pacienteFinal =
+                cita.pacienteNombre ||
+                cita.cliente_nombre ||
+                cita.cliente?.nombre_completo ||
+                cita.cliente?.nombre ||
+                (cita.cliente_id && clientesMap[Number(cita.cliente_id)]) ||
+                (cita.cliente && clientesMap[Number(cita.cliente)]) ||
+                (cita.cliente_id
+                  ? `Cliente #${cita.cliente_id}`
+                  : cita.cliente
+                  ? `Cliente #${cita.cliente}`
+                  : null);
+
+              allSlots.push({
+                id: cita.id || `${fechaDia}-${hora}`,
+                fecha: fechaDia,
+                horaInicio: hora,
+                horaFin: cita.horaFin,
+                duracion: cita.duracion || cita.duracion_minutos || 30,
+                estado: estadoCita === "cancelada" ? "cancelada" : "ocupada",
+                estadoCita,
+                paciente: pacienteFinal,
+                mascota: mascotaNombre,
+                motivo: cita.motivo || null,
+                citaId: cita.id,
+                box: cita.box || cita.box_nombre || "",
+              });
+            } else {
+              allSlots.push({
+                id: `${fechaDia}-${hora}`,
+                fecha: fechaDia,
+                horaInicio: hora,
+                horaFin: sumarMinutos(hora, 30),
+                estado: "libre",
+                estadoCita: null,
+                paciente: null,
+                mascota: null,
+                motivo: null,
+                citaId: null,
+                box: "",
+              });
+            }
+          });
+        }
+
+        setSlots(allSlots);
+        setHoras(Array.from(horasSet).sort());
+      } catch (err) {
+        console.error("Error cargando agenda de la semana:", err);
+        setError("No se pudo cargar la agenda para esa semana.");
+        setSlots([]);
+        setHoras([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAgendaSemana();
+  }, [vetId, weekOffset, reloadAgenda, clientesMap]);
+
+  // Actualiza el slot localmente al asignar una nueva cita y fuerza recarga desde backend
+  const handleAsignarConfirm = (payload) => {
+    setSlots((prev) =>
+      prev.map((s) =>
+        s.id === payload.slot_id
+          ? {
+              ...s,
+              estado: "ocupada",
+              estadoCita: "pendiente",
+              paciente: payload.cliente_nombre || s.paciente,
+              mascota: payload.mascota_nombre || s.mascota,
+              motivo: payload.motivo || s.motivo,
+              box: payload.box || s.box,
+              citaId: payload.cita_id || s.citaId,
+            }
+          : s
+      )
+    );
+    setSlotParaAsignar(null);
+    setReloadAgenda((n) => n + 1);
+  };
+
+  const getEstadoChip = (slot) => {
+    if (slot.estado === "cancelada") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-[1px] text-[9px] font-medium text-rose-700">
+          Cancelada
+        </span>
+      );
+    }
+
+    if (slot.estadoCita === "atendida") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
+          Atendida
+        </span>
+      );
+    }
+
+    if (slot.estadoCita === "no_asistida") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
+          No asistencia
+        </span>
+      );
+    }
+
+    if (slot.estadoCita === "confirmada") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-[1px] text-[9px] font-medium text-sky-700">
+          Confirmada
+        </span>
+      );
+    }
+
+    if (slot.estado === "libre") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-dashed border-emerald-300 bg-emerald-50 px-2 py-[1px] text-[9px] font-medium text-emerald-700">
+          Libre
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-[1px] text-[9px] font-medium text-amber-800">
+        Pendiente
+      </span>
+    );
+  };
+
+  const getSlotCardClasses = (slot) => {
+    if (slot.estado === "libre")
+      return "border border-dashed border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50";
+
+    if (slot.estado === "cancelada")
+      return "border border-rose-200 bg-rose-50/60 text-slate-400 line-through";
+
+    return "border border-sky-200 bg-sky-50 hover:bg-sky-100";
+  };
+
+  return (
+    <LayoutVet>
+      <div className="space-y-6">
+        {/* Encabezado */}
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.18em] text-sky-600 uppercase">
+                Vetyon · Veterinario
+              </p>
+              <h1 className="mt-1 text-2xl font-bold text-slate-900">
+                Agenda semanal
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Visualiza tus horas disponibles y tus citas en un calendario
+                compacto de la semana.
+              </p>
+              {error && (
+                <p className="mt-2 text-xs text-rose-500">{error}</p>
+              )}
+            </div>
+
+            <div className="flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                <CalendarDays size={18} className="text-sky-600" />
+                <span>{currentWeekLabel}</span>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Día seleccionado:{" "}
+                {dayjs(fecha).format("dddd DD [de] MMMM YYYY")}
+              </span>
+            </div>
+          </div>
+
+          {/* Tira de días */}
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+              Selecciona un día para el resumen
+            </span>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleWeekNav("prev")}
+                className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <div className="flex flex-col items-center">
+                <div className="flex gap-1 overflow-x-auto pb-1 max-w-xs md:max-w-md">
+                  {upcomingDays.map((d) => (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => handleSelectDia(d.value)}
+                      className={
+                        "flex flex-col items-center min-w-[2.6rem] px-2 py-1 rounded-lg border text-[10px] " +
+                        (fecha === d.value
+                          ? "bg-sky-600 text-white border-sky-600"
+                          : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
+                      }
+                    >
+                      <span className="uppercase tracking-wide text-[9px]">
+                        {d.dow}
+                      </span>
+                      <span className="text-xs font-semibold">
+                        {d.dia}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleWeekNav("next")}
+                className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Calendario semanal */}
+        <section>
+          <div className="rounded-2xl bg-white shadow-sm border border-slate-100 p-3 md:p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  Calendario semanal
+                </p>
+                <p className="text-xs text-slate-500">
+                  7 días · bloques de 30 minutos.
+                </p>
+              </div>
+            </div>
+
+            {loading && (
+              <p className="text-xs text-slate-500">
+                Cargando agenda de la semana...
+              </p>
+            )}
+
+            {!loading && horas.length === 0 && (
+              <p className="text-xs text-slate-500">
+                No hay horas generadas para esta semana.
+              </p>
+            )}
+
+            {!loading && horas.length > 0 && (
+              <div className="overflow-auto max-w-full max-h-[540px]">
+                <table className="table-fixed w-full border-separate border-spacing-y-1 text-[11px]">
+                  <thead>
+                    <tr>
+                      <th className="w-14 text-right text-[10px] font-semibold text-slate-500 pr-2 pt-1">
+                        Hora
+                      </th>
+                      {upcomingDays.map((d) => (
+                        <th
+                          key={d.value}
+                          className="text-center text-[10px] font-semibold text-slate-600 px-1"
+                        >
+                          <div className="flex flex-col items-center leading-tight">
+                            <span className="uppercase text-[9px]">
+                              {d.dow}
+                            </span>
+                            <span className="text-xs font-semibold">
+                              {d.dia}
+                            </span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {horas.map((hora) => (
+                      <tr key={hora}>
+                        {/* columna de hora */}
+                        <td className="align-top text-right text-[10px] font-medium text-slate-500 pr-2 pt-2">
+                          {hora}
+                        </td>
+
+                        {upcomingDays.map((d) => {
+                          const slot = slots.find(
+                            (s) =>
+                              s.fecha === d.value && s.horaInicio === hora
+                          );
+
+                          if (!slot) {
+                            return (
+                              <td key={d.value} className="align-top px-[2px]">
+                                <div className="h-9 rounded-lg border border-dashed border-slate-100 bg-slate-50/40" />
+                              </td>
+                            );
+                          }
+
+                          return (
+                            <td key={d.value} className="align-top px-[2px]">
+                              <div
+                                className={
+                                  "min-h-[2.4rem] rounded-lg px-2 py-1.5 text-[10px] cursor-pointer transition " +
+                                  getSlotCardClasses(slot)
+                                }
+                                onClick={() => {
+                                  if (slot.estado === "libre") {
+                                    setSlotParaAsignar(slot);
+                                  } else if (slot.citaId) {
+                                    setCitaAcciones(slot);
+                                  }
+                                }}
+                              >
+                                {slot.estado === "libre" ? (
+                                  <div className="flex flex-col h-full justify-between">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-semibold text-slate-800 text-[10px]">
+                                        Horario libre
+                                      </span>
+                                      {getEstadoChip(slot)}
+                                    </div>
+                                    <div className="flex justify-end mt-1">
+                                      <button
+                                        type="button"
+                                        className="rounded-md bg-sky-600 px-2 py-[3px] text-[9px] font-semibold text-white hover:bg-sky-700"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSlotParaAsignar(slot);
+                                        }}
+                                      >
+                                        Asignar cita
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-start justify-between gap-1">
+                                      <div className="space-y-[1px]">
+                                        <p className="text-[9px] font-semibold text-slate-500">
+                                          {slot.horaInicio} – {slot.horaFin}
+                                        </p>
+                                        <p className="text-[10px] font-semibold text-slate-900 line-clamp-1">
+                                          {slot.mascota ||
+                                            "Mascota sin nombre"}
+                                        </p>
+                                        <p className="text-[9px] text-slate-600 line-clamp-1">
+                                          Dueño:{" "}
+                                          {slot.paciente ||
+                                            "Cliente no registrado"}
+                                        </p>
+                                      </div>
+                                      <div className="flex flex-col items-end gap-0.5">
+                                        {getEstadoChip(slot)}
+                                        {slot.box && (
+                                          <span className="text-[9px] text-slate-500">
+                                            Box: <strong>{slot.box}</strong>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <p className="text-[9px] text-slate-600 line-clamp-2">
+                                      Motivo:{" "}
+                                      {slot.motivo ||
+                                        "Sin motivo registrado"}
+                                    </p>
+
+                                    {slot.estadoCita === "atendida" && (
+                                      <p className="text-[9px] text-emerald-700 font-semibold">
+                                        Estado: Atendida
+                                      </p>
+                                    )}
+                                    {slot.estadoCita === "no_asistida" && (
+                                      <p className="text-[9px] text-amber-700 font-semibold">
+                                        Estado: No asistencia
+                                      </p>
+                                    )}
+
+                                    <p className="mt-1 text-[9px] text-slate-400 italic">
+                                      Click para ver opciones
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <ModalCrearCita
+        open={!!slotParaAsignar}
+        slot={slotParaAsignar}
+        onClose={() => setSlotParaAsignar(null)}
+        onConfirm={(data) => {
+          handleAsignarConfirm(data);
+        }}
+      />
+
+      {/* Modal reprogramar */}
+      <ModalReprogramarCita
+        open={!!citaParaReprogramar}
+        cita={citaParaReprogramar}
+        vetId={vetId}
+        onClose={() => setCitaParaReprogramar(null)}
+        onConfirm={({ id, nueva_fecha, nueva_hora }) => {
+          setSlots((prev) =>
+            prev.map((s) =>
+              s.citaId === id
+                ? {
+                    ...s,
+                    fecha: nueva_fecha || s.fecha,
+                    horaInicio: nueva_hora,
+                    horaFin: sumarMinutos(nueva_hora, 30),
+                  }
+                : s
+            )
+          );
+          // Forzamos recarga desde backend para mantener todo consistente
+          setReloadAgenda((n) => n + 1);
+        }}
+      />
+
+      {/* Modal de opciones de la cita ocupada */}
+      {citaAcciones && (
+        <ModalAccionesCita
+          slot={citaAcciones}
+          getEstadoChip={getEstadoChip}
+          onClose={() => setCitaAcciones(null)}
+          onConfirmar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            abrirConfirmar(slot);
+          }}
+          onReprogramar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            if (!slot.citaId) return;
+            setCitaParaReprogramar({
+              id: slot.citaId,
+              inicio: `${slot.fecha}T${slot.horaInicio}`,
+              box: slot.box || "",
+              duracion: slot.duracion || 30,
+            });
+          }}
+          onCancelar={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleCancelarCita(slot);
+          }}
+          onMarcarAtendida={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleMarcarAtendida(slot);
+          }}
+          onMarcarNoAsistida={() => {
+            const slot = citaAcciones;
+            setCitaAcciones(null);
+            handleMarcarNoAsistida(slot);
+          }}
+        />
+      )}
+
+      {/* Modal confirmar cita + sala */}
+      {showConfirmModal && citaAConfirmar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-900">
+                Confirmar cita
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {citaAConfirmar.fecha} · {citaAConfirmar.horaInicio} -{" "}
+                {citaAConfirmar.horaFin}
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleConfirmarCita}
+              className="px-5 py-4 space-y-3"
+            >
+              <div>
+                <label className="text-xs font-medium text-slate-700">
+                  Sala / Box asignado
+                </label>
+                <input
+                  type="text"
+                  value={boxConfirm}
+                  onChange={(e) => setBoxConfirm(e.target.value)}
+                  placeholder="BOX-1, BOX-2..."
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  required
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                Al confirmar la cita quedará marcada como{" "}
+                <span className="font-semibold">confirmada</span> y se guardará
+                la sala asignada.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 mt-2">
+                <button
+                  type="button"
+                  onClick={cerrarConfirmar}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingConfirm}
+                  className="rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+                >
+                  {savingConfirm ? "Confirmando..." : "Confirmar cita"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </LayoutVet>
+  );
+}
+
+/**
+ * Modal para mostrar la información de una cita ocupada
+ * y ofrecer acciones: Confirmar, Reprogramar, Cancelar, Atendida, No asistencia.
+ */
+function ModalAccionesCita({
+  slot,
+  getEstadoChip,
+  onClose,
+  onConfirmar,
+  onReprogramar,
+  onCancelar,
+  onMarcarAtendida,
+  onMarcarNoAsistida,
+}) {
+  if (!slot) return null;
+
+  const fechaLabel = dayjs(slot.fecha).format("dddd DD [de] MMMM YYYY");
+
+  const estaCancelada = slot.estado === "cancelada";
+  const yaMarcadaAsistencia =
+    slot.estadoCita === "atendida" || slot.estadoCita === "no_asistida";
+
+  const mostrarBotonesAsistencia = !estaCancelada && !yaMarcadaAsistencia;
+
+  const mostrarBotonConfirmar =
+    !estaCancelada &&
+    slot.estadoCita !== "confirmada" &&
+    !yaMarcadaAsistencia;
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl border border-slate-200">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              Detalles de la cita
+            </p>
+            <p className="text-xs text-slate-500">
+              {fechaLabel} · {slot.horaInicio} - {slot.horaFin}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-slate-400 hover:bg-slate-100"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-slate-500">Mascota</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {slot.mascota || "Mascota sin nombre"}
+              </p>
+              <p className="text-xs text-slate-600">
+                Dueño: {slot.paciente || "Cliente no registrado"}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              {getEstadoChip(slot)}
+              {slot.box && (
+                <span className="text-[11px] text-slate-500">
+                  Box: <strong>{slot.box}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Motivo</p>
+            <p className="text-xs text-slate-700">
+              {slot.motivo || "Sin motivo registrado"}
+            </p>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
+            {mostrarBotonConfirmar && (
+              <button
+                type="button"
+                onClick={onConfirmar}
+                className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+              >
+                Confirmar cita
+              </button>
+            )}
+
+            {mostrarBotonesAsistencia && (
+              <>
+                <button
+                  type="button"
+                  onClick={onMarcarAtendida}
+                  className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200 hover:bg-emerald-50"
+                >
+                  Marcar como atendida
+                </button>
+                <button
+                  type="button"
+                  onClick={onMarcarNoAsistida}
+                  className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-amber-700 border border-amber-200 hover:bg-amber-50"
+                >
+                  Marcar como no asistencia
+                </button>
+              </>
+            )}
+
+            {!estaCancelada && (
+              <button
+                type="button"
+                onClick={onReprogramar}
+                className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-sky-700 border border-sky-200 hover:bg-sky-50"
+              >
+                Reprogramar
+              </button>
+            )}
+
+            {!estaCancelada && (
+              <button
+                type="button"
+                onClick={onCancelar}
+                className="w-full rounded-xl bg-white px-4 py-2 text-xs font-semibold text-rose-700 border border-rose-200 hover:bg-rose-50"
+              >
+                Cancelar cita
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

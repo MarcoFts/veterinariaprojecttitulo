@@ -1,36 +1,142 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import LayoutVet from "../../components/layout/LayoutVet";
-import { Users2 } from "lucide-react";
+import { UserRound, Eye } from "lucide-react";
+import { getMascotas } from "../../services/api";
+
+// ---------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------
+const calcularEdad = (fechaNacimiento) => {
+  if (!fechaNacimiento) return null;
+
+  const fecha = new Date(fechaNacimiento);
+  if (isNaN(fecha)) return null;
+
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - fecha.getFullYear();
+  const m = hoy.getMonth() - fecha.getMonth();
+
+  if (m < 0 || (m === 0 && hoy.getDate() < fecha.getDate())) {
+    edad--;
+  }
+
+  return edad >= 0 ? edad : null;
+};
 
 export default function VetPacientes() {
+  const [pacientes, setPacientes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchPacientes() {
+      try {
+        const res = await getMascotas();
+        setPacientes(Array.isArray(res.data) ? res.data : []);
+      } catch (error) {
+        console.error("Error cargando pacientes atendidos:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPacientes();
+  }, []);
+
+  // ---------------------------------------------------------
+  // TEXTO EDAD
+  // ---------------------------------------------------------
+  const getEdadTexto = (m) => {
+    // 1) Si backend ya mandara edad directa
+    if (m.edad) return `${m.edad} años`;
+
+    // 2) Calcular desde fecha_nacimiento
+    const edadCalculada = calcularEdad(m.fecha_nacimiento);
+    if (edadCalculada !== null) return `${edadCalculada} años`;
+
+    // 3) Fallback
+    return "Edad no registrada";
+  };
+
+  const getDuenoTexto = (m) => {
+    if (m.dueno_nombre) return m.dueno_nombre;
+    if (m.cliente_nombre) return m.cliente_nombre;
+    if (m.cliente?.nombre_completo) return m.cliente.nombre_completo;
+    return "Sin datos";
+  };
+
   return (
     <LayoutVet>
-      <div className="space-y-6">
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Veterinario
-            </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
-              Mascotas y clientes
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Aquí podrás ver y gestionar las mascotas que atiendes y sus dueños.
-            </p>
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white border border-slate-100 shadow-[0_8px_25px_rgba(15,23,42,0.06)] p-6 flex flex-col items-center justify-center text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-600 mb-3">
-            <Users2 className="h-6 w-6" />
-          </div>
-          <h2 className="text-sm font-semibold text-slate-900 mb-1">
-            Aún no hay mascotas cargadas
-          </h2>
-          <p className="text-sm text-slate-600 max-w-md">
-            Cuando el módulo esté conectado al backend, aquí verás el listado de
-            pacientes y podrás filtrar por dueño, especie y estado.
+      <div className="space-y-8">
+        {/* Encabezado */}
+        <section>
+          <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
+            Vetyon · Veterinario
+          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+            Pacientes atendidos
+          </h1>
+          <p className="text-sm text-slate-600">
+            Gestiona las mascotas que atiendes y accede a sus fichas clínicas.
           </p>
         </section>
+
+        {/* Contenido */}
+        {loading ? (
+          <p className="text-sm text-slate-500">Cargando pacientes...</p>
+        ) : pacientes.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Aún no hay pacientes registrados para este veterinario.
+          </p>
+        ) : (
+          <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {pacientes.map((m) => (
+              <article
+                key={m.id}
+                className="bg-white rounded-3xl p-5 border border-slate-200 shadow-[0_8px_25px_rgba(15,23,42,0.06)] flex flex-col justify-between"
+              >
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-600">
+                    <UserRound className="h-5 w-5" />
+                  </div>
+
+                  <div>
+                    <h2 className="font-semibold text-lg text-slate-900">
+                      {m.nombre || "Sin nombre"}
+                    </h2>
+
+                    <p className="text-sm text-slate-600">
+                      Especie: {m.especie || "No registrada"}
+                    </p>
+
+                    <p className="text-sm text-slate-600">
+                      Edad: {getEdadTexto(m)}
+                    </p>
+
+                    <p className="text-sm text-slate-600">
+                      Dueño: {getDuenoTexto(m)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400">
+                    Historia clínica #{m.id}
+                  </span>
+
+                  <Link
+                    to={`/veterinario/paciente/${m.id}`}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-sky-600 hover:text-sky-700"
+                    title="Ver ficha del paciente"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Ver
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
       </div>
     </LayoutVet>
   );

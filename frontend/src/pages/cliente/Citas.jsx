@@ -1,399 +1,929 @@
+// src/pages/cliente/citas.jsx
 import LayoutCliente from "../../components/layout/LayoutCliente";
+import ModalReprogramarCitaCliente from "../../components/modals/ModalReprogramarCitaCliente";
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "dayjs";
+import "dayjs/locale/es";
 import {
   CalendarDays,
   Clock,
   Stethoscope,
-  PawPrint,
   Info,
+  RefreshCw,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   getVeterinarios,
   getMascotas,
   getCitas,
   crearCita,
+  getDisponibilidad,
+  reprogramarCita,
+  cancelarCita,
+  getMotivosConsulta,
 } from "../../services/api";
 
-const DURACIONES = [15, 30, 45, 60];
-const BOXES = ["BOX-1", "BOX-2"];
+dayjs.locale("es");
+const LABEL_OTRO_MOTIVO = "Otro motivo";
+
+// Duraciones por tipo de motivo (en minutos)
+const DURACION_POR_MOTIVO = {
+  Vacunación: 20,
+  Desparasitación: 20,
+  "Esterilización / castración": 60,
+  "Control general / chequeo sano": 30,
+  "Control anual de rutina": 30,
+  "Control postoperatorio": 25,
+  "Control de enfermedad crónica": 30,
+  "Atención de urgencia": 45,
+};
 
 export default function Citas() {
-  const [fecha, setFecha] = useState(dayjs().format("YYYY-MM-DD"));
+  const hoy = dayjs().format("YYYY-MM-DD");
 
-  const [form, setForm] = useState({
-    veterinario_id: "",
-    mascota_id: "",
-    duracion: 30,
-    box: "BOX-1",
-    hora: "10:00",
-    motivo: "",
-  });
+  const [fecha, setFecha] = useState(hoy);
+  const [weekOffset, setWeekOffset] = useState(0);
 
+  const [motivosPredef, setMotivosPredef] = useState([]);
   const [veterinarios, setVeterinarios] = useState([]);
   const [mascotas, setMascotas] = useState([]);
   const [citasDia, setCitasDia] = useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingForm, setLoadingForm] = useState(false);
   const [error, setError] = useState("");
 
-  // ordenar citas por hora para mostrar lista limpia
-  const citasOrdenadas = useMemo(
-    () =>
-      [...citasDia].sort((a, b) =>
-        dayjs(a.inicio).diff(dayjs(b.inicio))
-      ),
-    [citasDia]
+  // Slots creación
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  const [form, setForm] = useState({
+    mascota: "",
+    veterinario: "",
+    fecha: hoy,
+    hora: "",
+    duracion: 30,
+    motivo: "",
+    motivoOtro: "",
+  });
+
+  // Reprogramación
+  const [showModal, setShowModal] = useState(false);
+  const [selectedCita, setSelectedCita] = useState(null);
+  const [nuevaFecha, setNuevaFecha] = useState(hoy);
+  const [slotsReprog, setSlotsReprog] = useState([]);
+  const [loadingSlotsReprog, setLoadingSlotsReprog] = useState(false);
+  const [slotSeleccionado, setSlotSeleccionado] = useState("");
+  const [savingReprog, setSavingReprog] = useState(false);
+  const [reprogWeekOffset, setReprogWeekOffset] = useState(0);
+
+  const citasOrdenadas = useMemo(() => {
+    return [...citasDia].sort((a, b) =>
+      dayjs(a.inicio).isAfter(dayjs(b.inicio)) ? 1 : -1
+    );
+  }, [citasDia]);
+
+  // Mini calendario creación
+  const upcomingDays = useMemo(() => {
+    const base = dayjs().add(weekOffset, "day");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = base.add(i, "day");
+      return {
+        value: d.format("YYYY-MM-DD"),
+        dia: d.format("DD"),
+        dow: d.format("ddd"),
+      };
+    });
+  }, [weekOffset]);
+
+  const currentMonthLabel = useMemo(() => {
+    return dayjs().add(weekOffset, "day").format("MMM YYYY");
+  }, [weekOffset]);
+
+  // Mini calendario reprogramar
+  const upcomingDaysReprog = useMemo(() => {
+    const base = dayjs().add(reprogWeekOffset, "day");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = base.add(i, "day");
+      return {
+        value: d.format("YYYY-MM-DD"),
+        dia: d.format("DD"),
+        dow: d.format("ddd"),
+      };
+    });
+  }, [reprogWeekOffset]);
+
+  const currentMonthLabelReprog = useMemo(
+    () => dayjs().add(reprogWeekOffset, "day").format("MMM YYYY"),
+    [reprogWeekOffset]
   );
 
-  const handleChange = (e) => {
+  const handleChangeForm = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  // cargar datos desde backend (cuando esté disponible)
-  useEffect(() => {
-    const loadAll = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const [vetsResp, petsResp, citasResp] = await Promise.all([
-          getVeterinarios(),
-          getMascotas(),
-          getCitas({ fecha }),
-        ]);
+  const handleMotivoChange = (e) => {
+    const value = e.target.value;
+    const duracionBase = DURACION_POR_MOTIVO[value] || 30;
 
-        setVeterinarios(vetsResp.data || []);
-        setMascotas(petsResp.data || []);
-        setCitasDia(citasResp.data || []);
-      } catch (err) {
-        if (err?.response?.status === 401) {
-          setError("Tu sesión expiró. Vuelve a iniciar sesión cuando el backend esté activo.");
-        } else {
-          setError("No se pudo cargar la información del servidor en este momento.");
-        }
-      } finally {
-        setLoading(false);
-      }
+    const nuevoForm = {
+      ...form,
+      motivo: value,
+      duracion: duracionBase,
     };
 
-    loadAll();
+    setForm(nuevoForm);
+
+    if (nuevoForm.veterinario && nuevoForm.fecha) {
+      cargarSlotsCrear(nuevoForm);
+    }
+  };
+
+  const cargarDatos = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [vetsResp, petsResp, citasResp] = await Promise.all([
+        getVeterinarios(),
+        getMascotas(),
+        getCitas({ fecha }),
+      ]);
+
+      setVeterinarios(vetsResp.data || []);
+      setMascotas(petsResp.data || []);
+      setCitasDia(citasResp.data || []);
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        setError("Tu sesión expiró. Vuelve a iniciar sesión.");
+      } else {
+        setError("No se pudieron cargar los datos.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cargarMotivos = async () => {
+    try {
+      const resp = await getMotivosConsulta();
+      let base = resp.data || [];
+
+      const tieneOtro = base.some(
+        (m) => (m.nombre || "").toLowerCase() === LABEL_OTRO_MOTIVO.toLowerCase()
+      );
+      if (!tieneOtro) {
+        base = [...base, { codigo: "OTRO", nombre: LABEL_OTRO_MOTIVO }];
+      }
+
+      setMotivosPredef(base);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
   }, [fecha]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
+  useEffect(() => {
+    cargarMotivos();
+  }, []);
 
-    if (!form.veterinario_id || !form.mascota_id || !form.motivo) {
-      setError("Completa los campos obligatorios para crear la cita.");
+  // Disponibilidad creación
+  const cargarSlotsCrear = async (values) => {
+    const f = values || form;
+    if (!f.veterinario || !f.fecha) return;
+
+    setLoadingSlots(true);
+    setSlots([]);
+    try {
+      const resp = await getDisponibilidad({
+        veterinario_id: f.veterinario,
+        fecha: f.fecha,
+        duracion: f.duracion || 30,
+        box: "",
+      });
+      setSlots(resp.data?.slots || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  const handleChangeVetOrFecha = async (e) => {
+    const { name, value } = e.target;
+    const nuevoForm = { ...form, [name]: value, hora: "" };
+    setForm(nuevoForm);
+
+    if (nuevoForm.veterinario && nuevoForm.fecha) {
+      await cargarSlotsCrear(nuevoForm);
+    }
+  };
+
+  const handleSelectDia = async (dateValue) => {
+    const nuevoForm = { ...form, fecha: dateValue, hora: "" };
+    setForm(nuevoForm);
+    setFecha(dateValue);
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
+  };
+
+  const handleWeekNav = async (direction) => {
+    let nextOffset = direction === "next" ? weekOffset + 7 : weekOffset - 7;
+    if (nextOffset < 0) nextOffset = 0;
+
+    const base = dayjs().add(nextOffset, "day");
+    const newDate = base.format("YYYY-MM-DD");
+
+    const nuevoForm = { ...form, fecha: newDate, hora: "" };
+    setWeekOffset(nextOffset);
+    setForm(nuevoForm);
+    setFecha(newDate);
+
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
+  };
+
+  const handleChangeFechaHeader = async (e) => {
+    const val = e.target.value;
+    const hoy = dayjs().format("YYYY-MM-DD");
+
+    //si el usuario intenta seleccionar un día pasado
+    if (dayjs(val).isBefore(hoy)) {
+      alert("No puedes ver ni agendar en días pasados.");
+      setFecha(hoy);
+
+      // Ajustar form también
+      setForm((prev) => ({
+        ...prev,
+        fecha: hoy,
+        hora: "",
+      }));
+
       return;
     }
 
-    setCreating(true);
+    // ✔ Si la fecha es válida
+    setFecha(val);
+
+    const nuevoForm = { ...form, fecha: val, hora: "" };
+    setForm(nuevoForm);
+
+    const diffDays = dayjs(val).diff(dayjs().startOf("day"), "day");
+    const aligned = diffDays < 0 ? 0 : diffDays - (diffDays % 7);
+    setWeekOffset(aligned);
+
+    if (nuevoForm.veterinario) await cargarSlotsCrear(nuevoForm);
+  };
+
+  // Crear cita
+  const handleSubmitCrear = async (e) => {
+    e.preventDefault();
+
+    if (!form.mascota || !form.veterinario || !form.fecha || !form.hora) {
+      alert("Debes completar todos los campos.");
+      return;
+    }
+
+    if (!form.motivo) {
+      alert("Debes seleccionar un motivo.");
+      return;
+    }
+
+    if (form.motivo === LABEL_OTRO_MOTIVO && !form.motivoOtro.trim()) {
+      alert("Escribe el motivo.");
+      return;
+    }
+
+    const clienteId = localStorage.getItem("cliente_id");
+    const inicio = `${form.fecha}T${form.hora}:00`;
+    const fin = dayjs(inicio)
+      .add(form.duracion, "minute")
+      .format("YYYY-MM-DDTHH:mm:ss");
+
+    const motivoFinal =
+      form.motivo === LABEL_OTRO_MOTIVO ? form.motivoOtro : form.motivo;
+
+    const payload = {
+      cliente_id: Number(clienteId),
+      mascota_id: Number(form.mascota),
+      veterinario_id: Number(form.veterinario),
+      inicio,
+      fin,
+      motivo: motivoFinal,
+      box: "BOX-1",
+    };
+
+    setLoadingForm(true);
     try {
-      const inicio = dayjs(`${fecha} ${form.hora}`);
-      const fin = inicio.add(Number(form.duracion), "minute");
-
-      const payload = {
-        veterinario: Number(form.veterinario_id),
-        mascota: Number(form.mascota_id),
-        box: form.box,
-        motivo: form.motivo,
-        inicio: inicio.toISOString(),
-        fin: fin.toISOString(),
-      };
-
-      const resp = await crearCita(payload);
-      setCitasDia((prev) => [...prev, resp.data]);
-      setForm((prev) => ({ ...prev, motivo: "" }));
+      await crearCita(payload);
+      setForm({ ...form, hora: "", motivo: "", motivoOtro: "" });
+      setSlots([]);
+      await cargarDatos();
     } catch (err) {
-      if (err?.response?.status === 401) {
-        setError("No autorizado. Inicia sesión otra vez cuando el backend esté disponible.");
-      } else {
-        setError("No se pudo crear la cita. Revisa los datos ingresados.");
-      }
+      alert("No se pudo crear la cita.");
     } finally {
-      setCreating(false);
+      setLoadingForm(false);
     }
   };
 
+  // Cancelar cita
+const [confirmOpen, setConfirmOpen] = useState(false);
+const [confirmCitaId, setConfirmCitaId] = useState(null);
+const [loadingCancelar, setLoadingCancelar] = useState(false);
+
+const handleCancelarCita = (id) => {
+  setConfirmCitaId(id);
+  setConfirmOpen(true);
+};
+
+const confirmarCancelacion = async () => {
+  if (!confirmCitaId) return;
+
+  setLoadingCancelar(true);
+
+  try {
+    // usamos el ID guardado en estado
+    await cancelarCita(confirmCitaId);
+
+    // recargar citas del día
+    await cargarDatos();
+
+    // cerrar modal
+    setConfirmOpen(false);
+    setConfirmCitaId(null);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoadingCancelar(false);
+  }
+};
+
+
+
+  const calcularDuracionCita = (cita) => {
+    if (cita.inicio && cita.fin) {
+      const diff = dayjs(cita.fin).diff(dayjs(cita.inicio), "minute");
+      return diff > 0 ? diff : 30;
+    }
+    return 30;
+  };
+
+  const cargarSlotsReprogramar = async (cita, fechaReprog) => {
+    if (!cita) return;
+    setLoadingSlotsReprog(true);
+    setSlotsReprog([]);
+    try {
+      const dur = calcularDuracionCita(cita);
+      const vetId = cita.veterinario_id || cita.veterinario;
+
+      const resp = await getDisponibilidad({
+        veterinario_id: vetId,
+        fecha: fechaReprog,
+        duracion: dur,
+        box: "", // box se mantiene en la cita, no en la disponibilidad
+      });
+
+      setSlotsReprog(resp.data?.slots || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingSlotsReprog(false);
+    }
+  };
+
+  const abrirModalReprogramar = (cita) => {
+    setSelectedCita(cita);
+    setShowModal(true);
+  };
+
+
+  // navegación semana modal
+  const handleReprogWeekNav = async (direction) => {
+    let nextOffset =
+      direction === "next" ? reprogWeekOffset + 7 : reprogWeekOffset - 7;
+    if (nextOffset < 0) nextOffset = 0;
+
+    const base = dayjs().add(nextOffset, "day");
+    const newDate = base.format("YYYY-MM-DD");
+
+    setReprogWeekOffset(nextOffset);
+    setNuevaFecha(newDate);
+    setSlotSeleccionado("");
+
+    if (selectedCita) {
+      await cargarSlotsReprogramar(selectedCita, newDate);
+    }
+  };
+
+  // seleccionar día en modal
+  const handleSelectDiaReprog = async (dateValue) => {
+    setNuevaFecha(dateValue);
+    setSlotSeleccionado("");
+    if (selectedCita) {
+      await cargarSlotsReprogramar(selectedCita, dateValue);
+    }
+  };
+
+  const handleSubmitReprogramar = async (e) => {
+    e.preventDefault();
+    if (!selectedCita || !nuevaFecha || !slotSeleccionado) return;
+
+    const inicio = `${nuevaFecha}T${slotSeleccionado}`;
+
+    setSavingReprog(true);
+    try {
+      await reprogramarCita(selectedCita.id, {
+        inicio,
+        duracion: calcularDuracionCita(selectedCita),
+        box: selectedCita.box || "", // respetamos el box que ya tenga la cita
+      });
+      setShowModal(false);
+      setSelectedCita(null);
+      await cargarDatos();
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo reprogramar la cita. Revisa la disponibilidad.");
+    } finally {
+      setSavingReprog(false);
+    }
+  };
+
+  // estilos del chip de estado
+  const getEstadoStyles = (estado) => {
+    switch ((estado || "").toLowerCase()) {
+      case "cancelada":
+        return "bg-red-100 text-red-700";
+      case "confirmada":
+        return "bg-emerald-100 text-emerald-700";
+      case "atendida":
+      case "completada":
+        return "bg-emerald-100 text-emerald-700";
+      case "no_asistida":
+      case "no asistida":
+        return "bg-amber-100 text-amber-700";
+      case "pendiente":
+      default:
+        return "bg-sky-100 text-sky-700";
+    }
+  };
+
+  const duracionTexto =
+    form.motivo && DURACION_POR_MOTIVO[form.motivo]
+      ? `${DURACION_POR_MOTIVO[form.motivo]} minutos aprox.`
+      : "—";
+
+  // ---------- Render ----------
+
   return (
     <LayoutCliente>
-      <div className="space-y-8">
-        {/* ENCABEZADO SUPERIOR */}
-        <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div className="space-y-6">
+        {/* Encabezado */}
+        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-1">
-              VetCare · Cliente
+              VETYON · CLIENTE
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
-                <CalendarDays size={20} />
-              </span>
-              <span>Citas</span>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+              Agenda tus citas
             </h1>
             <p className="text-sm text-slate-600 mt-1">
-              Agenda, organiza y revisa las atenciones de tus mascotas en la clínica.
+              Elige mascota, veterinario y horario disponible. También puedes
+              reprogramar o cancelar citas existentes.
             </p>
           </div>
 
-          <div className="flex flex-col items-end gap-2">
-            <span className="text-[11px] text-slate-500 hidden md:inline">
-              Selecciona una fecha para ver y crear citas ese día.
-            </span>
-            <div className="inline-flex items-center gap-2 rounded-2xl bg-white/80 border border-slate-200 px-3 py-2 shadow-sm">
-              <CalendarDays className="h-4 w-4 text-sky-500" />
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="border-none bg-transparent text-sm text-slate-700 focus:outline-none focus:ring-0"
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-slate-700">Fecha:</label>
+            <input
+              type="date"
+              value={fecha}
+              min={hoy}  // <-- EVITA DIAS PASADOS
+              onChange={handleChangeFechaHeader}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+            />
+            <button
+              onClick={cargarDatos}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Actualizar
+            </button>
           </div>
-        </header>
+        </section>
 
-        {/* ALERTA DE ERROR */}
         {error && (
-          <div className="rounded-xl bg-rose-50 border border-rose-100 px-3 py-2 text-xs text-rose-600 flex items-start gap-2">
-            <Info className="h-4 w-4 mt-[2px]" />
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* CONTENIDO PRINCIPAL */}
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-6">
-          {/* PANEL IZQUIERDO: FORMULARIO */}
-          <section className="bg-gradient-to-br from-sky-50/80 via-white to-white border border-white/80 rounded-2xl p-5 md:p-6 shadow-xl space-y-5">
-            {/* Encabezado pequeño del formulario */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-                  <Stethoscope size={18} />
-                </span>
-                <div>
-                  <h2 className="font-semibold text-slate-900 text-sm md:text-base">
-                    Crear nueva cita
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Completa los datos para agendar una atención en la clínica.
-                  </p>
-                </div>
-              </div>
-              <div className="hidden md:flex flex-col items-end text-[11px] text-slate-500">
-                <span>Duración: {form.duracion} min · Box: {form.box}</span>
-                <span>Hora seleccionada: {form.hora}</span>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Panel izquierdo: crear cita */}
+          <section className="bg-white/90 rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Stethoscope className="h-5 w-5 text-sky-600" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                Nueva cita
+              </h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-              {/* VETERINARIO + FECHA */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
-                    <Stethoscope size={14} className="text-sky-500" />
-                    Veterinario
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    name="veterinario_id"
-                    value={form.veterinario_id}
-                    onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  >
-                    <option value="">Seleccionar…</option>
-                    {veterinarios.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
-                    <CalendarDays size={14} className="text-sky-500" />
-                    Fecha
-                  </label>
-                  <input
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  />
-                </div>
-              </div>
-
-              {/* MASCOTA */}
+            <form onSubmit={handleSubmitCrear} className="space-y-4 text-sm">
+              {/* Mascota */}
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
-                  <PawPrint size={14} className="text-sky-500" />
+                <label className="text-xs font-medium text-slate-600">
                   Mascota
-                  <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  name="mascota_id"
-                  value={form.mascota_id}
-                  onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  name="mascota"
+                  value={form.mascota}
+                  onChange={handleChangeForm}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                 >
-                  <option value="">Seleccionar…</option>
+                  <option value="">Selecciona una mascota</option>
                   {mascotas.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.nombre}
+                      {m.nombre} · {m.especie}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* DURACIÓN + BOX */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Duración
-                  </label>
-                  <select
-                    name="duracion"
-                    value={form.duracion}
-                    onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  >
-                    {DURACIONES.map((d) => (
-                      <option key={d} value={d}>
-                        {d} min
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">
-                    Box
-                  </label>
-                  <select
-                    name="box"
-                    value={form.box}
-                    onChange={handleChange}
-                    className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                  >
-                    {BOXES.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* HORA */}
+              {/* Veterinario */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">
-                  Hora
+                  Veterinario
                 </label>
-                <input
-                  type="time"
-                  name="hora"
-                  value={form.hora}
-                  onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                />
-              </div>
-
-              {/* MOTIVO */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
-                  Motivo de la consulta
-                  <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="motivo"
-                  value={form.motivo}
-                  onChange={handleChange}
-                  placeholder="Control, vacunas, urgencia, etc."
-                  className="w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
-                />
-              </div>
-
-              {/* BOTÓN SUBMIT + INFO */}
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pt-1">
-                <p className="text-[11px] text-slate-400 max-w-xs">
-                  Las citas se registrarán en tu panel y se conectarán al backend
-                  de VetCare en el futuro.
-                </p>
-
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className={`inline-flex items-center justify-center rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition ${
-                    creating
-                      ? "bg-sky-300/80 cursor-not-allowed"
-                      : "bg-gradient-to-r from-sky-500 to-blue-600 hover:opacity-90 hover:shadow-lg"
-                  }`}
+                <select
+                  name="veterinario"
+                  value={form.veterinario}
+                  onChange={handleChangeVetOrFecha}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
                 >
-                  {creating ? "Creando…" : "Crear cita"}
-                </button>
+                  <option value="">Selecciona un veterinario</option>
+                  {veterinarios.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.nombre ||
+                        `${(v.first_name || "")} ${(v.last_name || "")}`.trim() ||
+                        v.email ||
+                        `Veterinario #${v.id}`}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* Fecha (calendario de días) */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600">
+                  Fecha
+                </label>
+
+                {/* Navegación de semanas */}
+                <div className="flex items-center justify-between mb-1">
+                  <button
+                    type="button"
+                    onClick={() => handleWeekNav("prev")}
+                    disabled={weekOffset === 0}
+                    className="p-1 rounded-full border border-slate-300 text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">
+                    {currentMonthLabel}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleWeekNav("next")}
+                    className="p-1 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Tira de días tipo calendario */}
+                <div className="flex gap-1 overflow-x-auto pb-1">
+                  {upcomingDays.map((d) => (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => handleSelectDia(d.value)}
+                      className={
+                        "flex flex-col items-center min-w-[3rem] px-2 py-1 rounded-lg border text-[11px] " +
+                        (form.fecha === d.value
+                          ? "bg-sky-600 text-white border-sky-600"
+                          : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100")
+                      }
+                    >
+                      <span className="uppercase tracking-wide text-[10px]">
+                        {d.dow}
+                      </span>
+                      <span className="text-sm font-semibold">{d.dia}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Motivo (select + input cuando es "Otro motivo") */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600">
+                  Motivo de consulta
+                </label>
+                {motivosPredef.length === 0 ? (
+                  <select
+                    name="motivo"
+                    value={form.motivo}
+                    onChange={handleMotivoChange}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  >
+                    <option value="">
+                      No se pudieron cargar los motivos. Intenta más tarde.
+                    </option>
+                  </select>
+                ) : (
+                  <select
+                    name="motivo"
+                    value={form.motivo}
+                    onChange={handleMotivoChange}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300"
+                  >
+                    <option value="">Selecciona un motivo</option>
+                    {motivosPredef.map((m) => (
+                      <option key={m.codigo || m.nombre} value={m.nombre}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Si el usuario escoge "Otro motivo", mostramos input libre */}
+                {form.motivo === LABEL_OTRO_MOTIVO && (
+                  <input
+                    type="text"
+                    name="motivoOtro"
+                    value={form.motivoOtro}
+                    onChange={handleChangeForm}
+                    placeholder="Escribe el motivo de la consulta"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-300 mt-2"
+                  />
+                )}
+
+                {/* Duración estimada */}
+                <p className="text-[11px] text-slate-500">
+                  La duración estimada para este motivo es de{" "}
+                  <span className="font-semibold">{duracionTexto}</span>.
+                </p>
+              </div>
+
+              {/* Horarios disponibles */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-sky-500" />
+                    Horarios disponibles
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => cargarSlotsCrear()}
+                    className="text-[11px] text-sky-600 hover:underline"
+                  >
+                    Actualizar horarios
+                  </button>
+                </div>
+
+                {loadingSlots ? (
+                  <p className="text-xs text-slate-500">
+                    Buscando disponibilidad...
+                  </p>
+                ) : !form.veterinario || !form.fecha ? (
+                  <p className="text-xs text-slate-500">
+                    Selecciona veterinario y fecha para ver horarios libres.
+                  </p>
+                ) : slots.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    No hay horarios disponibles para este día.
+                  </p>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl bg-slate-50 px-3 py-3">
+                    <p className="text-[11px] text-slate-500 mb-2">
+                      Horarios disponibles para{" "}
+                      <span className="font-semibold">
+                        {dayjs(form.fecha).format("ddd DD MMM YYYY")}
+                      </span>
+                    </p>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                      {slots.map((h) => {
+                        const slotTime = dayjs(`${form.fecha}T${h}`);
+                        const now = dayjs();
+
+                        // 1) Bloquear horas pasadas
+                        const esHoraPasada =
+                          form.fecha === now.format("YYYY-MM-DD") &&
+                          slotTime.isBefore(now);
+
+                        // 2) Bloquear horas demasiado cercanas (ej: margen = 60min)
+                        const margenMinutos = 60;
+                        const esMuyCercana =
+                          form.fecha === now.format("YYYY-MM-DD") &&
+                          slotTime.isBefore(now.add(margenMinutos, "minute"));
+
+                        const deshabilitada = esHoraPasada || esMuyCercana;
+
+                        return (
+                          <label
+                            key={h}
+                            className={
+                              "flex items-center justify-center rounded-lg border px-2 py-1.5 text-xs select-none " +
+                              (deshabilitada
+                                ? "bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed"
+                                : form.hora === h
+                                  ? "bg-sky-600 text-white border-sky-600 cursor-pointer"
+                                  : "bg-white text-slate-700 border-slate-300 cursor-pointer hover:bg-slate-100")
+                            }
+                          >
+                            <input
+                              type="radio"
+                              name="hora"
+                              value={h}
+                              checked={form.hora === h}
+                              disabled={deshabilitada}
+                              onChange={() =>
+                                !deshabilitada &&
+                                setForm((prev) => ({
+                                  ...prev,
+                                  hora: h,
+                                }))
+                              }
+                              className="hidden"
+                            />
+                            {h}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loadingForm}
+                className="w-full mt-2 inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loadingForm ? "Creando cita..." : "Confirmar cita"}
+              </button>
+
+              <p className="flex items-start gap-2 text-[11px] text-slate-500 mt-2">
+                <Info className="h-3 w-3 mt-0.5" />
+                Recibirás la confirmación de tu cita una vez que sea validada
+                por la clínica.
+              </p>
             </form>
           </section>
 
-          {/* PANEL DERECHO: LISTA DE CITAS */}
-          <section className="bg-white/70 backdrop-blur-md border border-white/80 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-                  <Clock size={18} />
-                </span>
-                <div>
-                  <h2 className="font-semibold text-slate-900 text-sm md:text-base">
-                    Citas del {dayjs(fecha).format("DD MMM YYYY")}
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Visualiza las atenciones programadas para este día.
-                  </p>
-                </div>
-              </div>
-
-              <span className="rounded-full bg-sky-50 text-sky-700 text-[11px] font-medium px-3 py-1 border border-sky-100">
-                {citasOrdenadas.length} cita
-                {citasOrdenadas.length === 1 ? "" : "s"}
-              </span>
+          {/* Panel derecho: listado de citas */}
+          <section className="bg-white/90 rounded-2xl border border-slate-200 shadow-sm p-4 md:p-5 space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarDays className="h-5 w-5 text-sky-600" />
+              <h2 className="text-sm font-semibold text-slate-900">
+                Citas del día
+              </h2>
             </div>
 
             {loading ? (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm text-slate-500">
-                Cargando citas…
-              </div>
+              <p className="text-sm text-slate-500">Cargando citas...</p>
             ) : citasOrdenadas.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 px-4 py-6 text-sm text-slate-500">
-                No hay citas registradas para esta fecha. Crea una nueva cita en el panel izquierdo.
+                No hay citas registradas para esta fecha. Crea una nueva cita en
+                el panel izquierdo.
               </div>
             ) : (
               <ul className="space-y-3 text-sm">
                 {citasOrdenadas.map((cita) => (
                   <li
                     key={cita.id}
-                    className="rounded-xl border border-slate-100 bg-white/90 px-3 py-3 shadow-sm flex justify-between items-center gap-3"
+                    className="rounded-xl border border-slate-200 bg-white/90 px-3 py-3 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3"
                   >
-                    <div>
-                      <p className="font-medium text-slate-800">
-                        {dayjs(cita.inicio).format("HH:mm")} ·{" "}
-                        {cita.motivo || "Consulta"}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Box: {cita.box}
-                      </p>
+                    <div className="flex items-start gap-3">
+                      <div className="flex flex-col items-center text-slate-500 mt-0.5">
+                        <Clock className="h-4 w-4 mb-1" />
+                        <span className="text-xs font-medium">
+                          {cita.inicio
+                            ? dayjs(cita.inicio).format("HH:mm")
+                            : "--:--"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-800">
+                          {cita.mascota_nombre || `Mascota #${cita.mascota}`}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          Vet:{" "}
+                          <span className="font-medium">
+                            {cita.veterinario_nombre ||
+                              `Veterinario #${cita.veterinario}`}
+                          </span>
+                          {" · "}
+                          <span className="font-mono text-[11px]">
+                            Box: {cita.box || "N/A"}
+                          </span>
+                        </p>
+                        {cita.motivo && (
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Motivo: {cita.motivo}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[11px] px-2 py-1">
-                      {cita.estado || "Pendiente"}
-                    </span>
+
+                    <div className="flex items-center gap-2 md:justify-end">
+                      <span
+                        className={
+                          "inline-flex items-center rounded-full text-[11px] px-2 py-1 " +
+                          getEstadoStyles(cita.estado)
+                        }
+                      >
+                        {cita.estado || "pendiente"}
+                      </span>
+
+                      {/* Si la cita está cancelada, NO mostramos botones */}
+                      {String(cita.estado).toLowerCase() !== "cancelada" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => abrirModalReprogramar(cita)}
+                            className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-sky-700"
+                          >
+                            Reprogramar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelarCita(cita.id)}
+                            className="inline-flex items-center rounded-lg border border-red-200 px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </section>
         </div>
+
+        {/* Modal reprogramar (mismo diseño que panel de veterinario) */}
+        <ModalReprogramarCitaCliente
+          open={showModal}
+          cita={selectedCita}
+          onClose={() => {
+            setShowModal(false);
+            setSelectedCita(null);
+          }}
+          onConfirm={async () => {
+            await cargarDatos();
+          }}
+        />
+
+        {/* Modal reprogramar */}
+        {confirmOpen && (
+          <div className="fixed inset-0 flex items-center justify-center z-[9999]">
+            <div className="bg-white p-6 rounded-xl shadow-xl w-[90%] max-w-sm border border-neutral-200 animate-fadeScale">
+
+              <h2 className="text-lg font-semibold text-neutral-800 mb-2">
+                ¿Cancelar cita?
+              </h2>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-neutral-200 text-neutral-700 hover:bg-neutral-300 transition"
+                >
+                  No
+                </button>
+
+                <button
+                  disabled={loadingCancelar}
+                  onClick={confirmarCancelacion}
+                  className={`px-4 py-2 rounded-lg text-white transition ${loadingCancelar
+                      ? "bg-red-400 cursor-not-allowed"
+                      : "bg-red-600 hover:bg-red-700"
+                    }`}
+                >
+                  {loadingCancelar ? "Cancelando..." : "Sí, cancelar"}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
       </div>
     </LayoutCliente>
   );

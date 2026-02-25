@@ -1,36 +1,181 @@
+// src/pages/veterinario/VetHome.jsx
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import LayoutVet from "../../components/layout/LayoutVet";
 import {
   CalendarDays,
-  Users2,
-  BarChart3,
   NotebookPen,
   Clock,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import dayjs from "dayjs";
+import "dayjs/locale/es";
+
+import { getCitas, getMascotas } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+
+dayjs.locale("es");
 
 export default function VetHome() {
-  // Datos estáticos de ejemplo (luego los puedes conectar al backend)
-  const kpis = [
-    { label: "Citas hoy", value: "0", trend: "Sin atenciones por ahora" },
-    { label: "Citas este mes", value: "0", trend: "Pendiente de agenda" },
-    { label: "Pacientes activos", value: "0", trend: "Aún sin registros" },
-  ];
+  const { user } = useAuth();
 
-  const proximasCitas = [
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [citas, setCitas] = useState([]);
+  const [pacientesActivos, setPacientesActivos] = useState(0);
+
+  // --------- CARGA DE DATOS DESDE EL BACKEND ---------
+  const cargarDatos = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const hoy = dayjs().format("YYYY-MM-DD");
+
+      // puedes ajustar los filtros según cómo tengas tu API
+      const paramsCitas = {
+        fecha_desde: dayjs().startOf("month").format("YYYY-MM-DD"),
+        fecha_hasta: dayjs().endOf("month").format("YYYY-MM-DD"),
+        veterinario_id: user?.id || user?.veterinario_id || undefined,
+      };
+
+      const [citasRes, mascotasRes] = await Promise.all([
+        getCitas(paramsCitas),
+        getMascotas(),
+      ]);
+
+      setCitas(citasRes.data || []);
+      setPacientesActivos((mascotasRes.data || []).length || 0);
+    } catch (e) {
+      console.error("Error cargando datos de panel:", e);
+      setError("No se pudieron cargar los datos del panel.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      cargarDatos();
+    }
+  }, [user]);
+
+  // --------- KPIs CALCULADOS ---------
+  const { citasHoy, citasMes } = useMemo(() => {
+    if (!citas || citas.length === 0) {
+      return { citasHoy: 0, citasMes: 0 };
+    }
+
+    const hoyStr = dayjs().format("YYYY-MM-DD");
+    const mesStr = dayjs().format("YYYY-MM");
+
+    const citasHoyCount = citas.filter((c) =>
+      dayjs(c.inicio || c.fecha).format("YYYY-MM-DD") === hoyStr &&
+      String(c.estado).toLowerCase() !== "cancelada"
+    ).length;
+
+    const citasMesCount = citas.filter((c) =>
+      (c.inicio || c.fecha || "").startsWith(mesStr) &&
+      String(c.estado).toLowerCase() !== "cancelada"
+    ).length;
+
+    return { citasHoy: citasHoyCount, citasMes: citasMesCount };
+  }, [citas]);
+
+  // --------- PRÓXIMAS CITAS (HOY) ---------
+  const proximasCitas = useMemo(() => {
+    if (!citas || citas.length === 0) {
+      return [
+        {
+          hora: "—",
+          paciente: "Sin citas agendadas",
+          detalle: "Cuando registres citas, aparecerán aquí.",
+          estado: "libre",
+        },
+      ];
+    }
+
+    const ahora = dayjs();
+    const hoyStr = ahora.format("YYYY-MM-DD");
+
+    const futuras = citas
+      .filter((c) => {
+        const inicio = dayjs(c.inicio);
+        const esHoy = inicio.format("YYYY-MM-DD") === hoyStr;
+        const noCancelada =
+          String(c.estado).toLowerCase() !== "cancelada" &&
+          String(c.estado).toLowerCase() !== "no_asistida";
+
+        return esHoy && inicio.isAfter(ahora) && noCancelada;
+      })
+      .sort((a, b) => dayjs(a.inicio).diff(dayjs(b.inicio)))
+      .slice(0, 3);
+
+    if (futuras.length === 0) {
+      return [
+        {
+          hora: "—",
+          paciente: "Sin citas pendientes para hoy",
+          detalle: "Tu agenda está libre por ahora.",
+          estado: "libre",
+        },
+      ];
+    }
+
+    return futuras.map((c) => ({
+      hora: dayjs(c.inicio).format("HH:mm"),
+      paciente: c.mascota_nombre || `Mascota #${c.mascota}`,
+      detalle:
+        c.cliente_nombre
+          ? `Dueño: ${c.cliente_nombre}`
+          : c.motivo
+          ? `Motivo: ${c.motivo}`
+          : "Cita agendada",
+      estado: "ocupada",
+    }));
+  }, [citas]);
+
+  // --------- TEXTO DEL RESUMEN DE HOY ---------
+  const resumenHoyTexto = useMemo(() => {
+    if (loading) return "Cargando información de tu agenda...";
+    if (citasHoy === 0) return "Sin citas registradas. Tu agenda está disponible.";
+    if (citasHoy === 1) return "Tienes 1 cita agendada para hoy.";
+    return `Tienes ${citasHoy} citas agendadas para hoy.`;
+  }, [citasHoy, loading]);
+
+  const kpis = [
     {
-      hora: "—",
-      paciente: "Sin citas agendadas",
-      detalle: "Cuando registres citas, aparecerán aquí.",
-      estado: "libre",
+      label: "Citas hoy",
+      value: loading ? "—" : citasHoy.toString(),
+      trend:
+        loading || citasHoy === 0
+          ? "Sin atenciones por ahora"
+          : "Revisa tu agenda del día",
+    },
+    {
+      label: "Citas este mes",
+      value: loading ? "—" : citasMes.toString(),
+      trend:
+        loading || citasMes === 0
+          ? "Pendiente de agenda"
+          : "Carga mensual de trabajo",
+    },
+    {
+      label: "Pacientes activos",
+      value: loading ? "—" : pacientesActivos.toString(),
+      trend:
+        loading || pacientesActivos === 0
+          ? "Aún sin registros"
+          : "Mascotas asociadas a tu cuenta",
     },
   ];
 
   return (
     <LayoutVet>
       <div className="space-y-10 md:space-y-12">
-        {/* HERO SUPER PREMIUM */}
+        {/* HERO */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-sky-50 via-white to-blue-50 border border-white shadow-[0_18px_55px_rgba(15,23,42,0.10)] px-6 py-6 md:px-8 md:py-7">
           {/* Glows decorativos */}
           <div className="pointer-events-none absolute -top-16 -right-10 h-40 w-40 rounded-full bg-sky-200/40 blur-3xl" />
@@ -40,7 +185,7 @@ export default function VetHome() {
             {/* Texto principal */}
             <div className="max-w-xl">
               <p className="text-xs font-semibold tracking-[0.25em] text-sky-600 uppercase mb-2">
-                VetCare · Panel Veterinario
+                Vetyon · Panel Veterinario
               </p>
               <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 leading-tight">
                 Panel del profesional
@@ -51,10 +196,11 @@ export default function VetHome() {
                 diario en clínica.
               </p>
 
-              {/* Pequeña línea informativa */}
-              <p className="mt-3 text-[11px] md:text-xs text-slate-500">
-                Estos datos se conectarán al backend de VetCare en el futuro.
-              </p>
+              {error && (
+                <p className="mt-3 text-xs text-red-600">
+                  {error} Intenta recargar la página.
+                </p>
+              )}
             </div>
 
             {/* Acciones principales */}
@@ -81,9 +227,7 @@ export default function VetHome() {
 
                 <span className="font-semibold text-slate-900">Hoy:</span>
 
-                <span className="text-slate-600">
-                 Sin citas registradas. Tu agenda está disponible.
-                </span>
+                <span className="text-slate-600">{resumenHoyTexto}</span>
               </div>
             </div>
           </div>
@@ -122,9 +266,8 @@ export default function VetHome() {
               </div>
 
               <p className="mt-4 text-sm text-slate-600 leading-relaxed">
-                No hay citas registradas para hoy aún. Mantén tu agenda
-                actualizada para organizar mejor tus atenciones y evitar
-                traslapes de horarios.
+                Revisa las atenciones que tienes agendadas para el día y
+                realiza ajustes rápidos en tu disponibilidad.
               </p>
             </div>
 
@@ -147,14 +290,13 @@ export default function VetHome() {
               </div>
 
               <p className="mt-4 text-sm text-slate-600 leading-relaxed">
-                Gestiona las mascotas que atiendes y sus dueños desde un solo
-                lugar. Más adelante podrás filtrar por especie, edad, estado de
-                salud y frecuencia de controles.
+                Gestiona las fichas clínicas de tus pacientes y sus dueños desde
+                un único lugar de trabajo.
               </p>
             </div>
 
             <Link
-              to="/veterinario/mascotas"
+              to="/veterinario/pacientes"
               className="mt-5 self-start text-xs font-semibold text-sky-600 hover:text-blue-700 transition"
             >
               Ver listado de mascotas →
@@ -172,14 +314,14 @@ export default function VetHome() {
               </div>
 
               <p className="mt-4 text-sm text-slate-600 leading-relaxed">
-                Visualiza un resumen general de tus reservas: confirmadas,
-                canceladas y atendidas. Ideal para tener una foto rápida de tu
-                carga de trabajo durante la semana.
+                Visualiza un resumen general de tus reservas confirmadas,
+                canceladas y atendidas para tener claridad de tu carga de
+                trabajo.
               </p>
             </div>
 
             <Link
-              to="/veterinario/citas"
+              to="/veterinario/agenda-dia"
               className="mt-5 self-start text-xs font-semibold text-sky-600 hover:text-blue-700 transition"
             >
               Ver estadísticas básicas →
@@ -189,7 +331,7 @@ export default function VetHome() {
 
         {/* BLOQUES INFERIORES */}
         <section className="grid gap-6 md:grid-cols-2">
-          {/* Próximas citas (timeline simple) */}
+          {/* Próximas citas */}
           <div className="rounded-3xl bg-white border border-slate-100 shadow-[0_8px_25px_rgba(15,23,42,0.06)] p-6 flex flex-col justify-between">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -197,7 +339,7 @@ export default function VetHome() {
                   Próximas citas
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Vista rápida de lo que viene en tu agenda profesional.
+                  Vista rápida de lo que viene en tu agenda profesional hoy.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-3 py-1 text-[11px] font-medium text-sky-700 border border-sky-100">
@@ -232,9 +374,6 @@ export default function VetHome() {
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400">
-                *Este módulo se conectará a tu agenda real y mostrará las citas por día.*
-              </p>
               <Link
                 to="/veterinario/agenda"
                 className="text-[11px] font-semibold text-sky-600 hover:text-blue-700 transition"
@@ -251,17 +390,12 @@ export default function VetHome() {
                 <NotebookPen className="h-4 w-4 text-sky-500" />
                 Notas y recordatorios
               </h2>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-slate-600 leading-relaxed">
                 Usa este espacio como referencia conceptual para futuros módulos
                 de notas internas, recordatorios o acuerdos relacionados con tu
                 agenda y pacientes.
               </p>
             </div>
-
-            <p className="mt-4 text-[11px] text-slate-400">
-              *Más adelante podrás vincular estas notas a citas y pacientes
-              específicos dentro del sistema.*
-            </p>
           </div>
         </section>
       </div>

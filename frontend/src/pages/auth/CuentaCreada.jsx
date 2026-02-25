@@ -3,7 +3,7 @@ import { CheckCircle } from "lucide-react";
 
 export default function CuentaCreada() {
   return (
-    <div className="min-h-screen bg-[#e8f4ff] flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="bg-white w-full max-w-lg rounded-3xl shadow-xl border border-slate-200 p-10 text-center animate-fadeIn">
         
         {/* Ícono éxito */}
@@ -19,7 +19,7 @@ export default function CuentaCreada() {
         {/* Subtítulo */}
         <p className="text-slate-600 mt-3 text-base leading-relaxed px-4">
           Tu registro fue exitoso. Ya puedes iniciar sesión para gestionar tus
-          mascotas, revisar citas disponibles y acceder a todo el sistema VetCare.
+          mascotas, revisar citas disponibles y acceder a todo el sistema Vetyon.
         </p>
 
         {/* Botones */}
