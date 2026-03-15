@@ -13,9 +13,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 
-// ---------------------------------------------------------
-// OBTENER user_id DEL TOKEN JWT PARA cliente_id
-// ---------------------------------------------------------
+// Obtener user_id del token JWT
 const getUserIdFromToken = () => {
   try {
     const token = localStorage.getItem("access");
@@ -211,8 +209,8 @@ export default function RegistrarMascota() {
           pet.sexo === "macho"
             ? "Macho"
             : pet.sexo === "hembra"
-            ? "Hembra"
-            : "No informado",
+              ? "Hembra"
+              : "No informado",
         fecha_nacimiento: pet.fechaNacimiento || null,
         peso_kg: pet.peso !== "" ? Number(pet.peso) : null,
         esterilizado: !!pet.esterilizado,
@@ -233,7 +231,6 @@ export default function RegistrarMascota() {
     } catch (err) {
       setSaving(false);
       setError("No se pudo registrar la mascota.");
-      console.log(err?.response?.data);
     }
   };
 
@@ -426,11 +423,10 @@ export default function RegistrarMascota() {
               <button
                 type="submit"
                 disabled={saving}
-                className={`inline-flex items-center justify-center rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition ${
-                  saving
+                className={`inline-flex items-center justify-center rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-md transition ${saving
                     ? "bg-sky-300/80 cursor-not-allowed"
                     : "bg-gradient-to-r from-sky-500 to-blue-600 hover:opacity-90 hover:shadow-lg"
-                }`}
+                  }`}
               >
                 {saving ? "Guardando…" : "Guardar mascota"}
               </button>

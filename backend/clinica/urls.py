@@ -25,6 +25,7 @@ from .views import (
     AdminUserRoleUpdateView,
     AdminDashboardView,
     NotificacionViewSet,
+    api_root,
 )
 
 # Vistas de autenticación
@@ -57,6 +58,9 @@ router.register(r"notificaciones", NotificacionViewSet, basename="notificaciones
 # URLS PRINCIPALES
 # -----------------------------
 urlpatterns = [
+    # Root view
+    path("", api_root, name="api-root"),
+
     # Endpoints principales
     path("api/", include(router.urls)),
 

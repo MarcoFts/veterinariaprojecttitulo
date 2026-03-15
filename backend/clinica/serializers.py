@@ -32,10 +32,7 @@ from .models import (
 
 User = get_user_model()
 
-# =====================================================
-# Helpers (validaciones compartidas)
-# =====================================================
-
+# Helpers de validación
 RUT_RE = re.compile(r"^[0-9]+-[0-9Kk]$")
 PHONE_DIGITS_RE = re.compile(r"\D+")
 
@@ -102,10 +99,7 @@ def validar_password_segura(value: str) -> str:
     return pwd
 
 
-# =====================================================
-# ---------- Cliente / Mascota ----------
-# =====================================================
-
+# Mascota
 class MascotaSerializer(serializers.ModelSerializer):
     microchip = serializers.CharField(
         required=False,
@@ -245,10 +239,7 @@ class MascotaSerializer(serializers.ModelSerializer):
         return self.get_dueno_nombre(obj)
 
 
-# =====================================================
-# ---------- Cliente ----------
-# =====================================================
-
+# Cliente
 class ClienteSerializer(serializers.ModelSerializer):
     nombre = serializers.SerializerMethodField()
     mascotas = MascotaSerializer(many=True, read_only=True)
@@ -504,6 +495,19 @@ class CitaSerializer(serializers.ModelSerializer):
         # Si falta info clave, dejamos que otras validaciones del serializer actúen
         if not inicio or not fin:
             return attrs
+
+        # 0) inicio >= momento actual (Solo si es nueva, o si cambiaron la fecha de inicio)
+        validar_fecha = True
+        if instance is not None:
+            if "inicio" not in attrs:
+                validar_fecha = False
+            elif attrs["inicio"] == instance.inicio:
+                validar_fecha = False
+
+        if validar_fecha and inicio < timezone.now():
+            raise serializers.ValidationError(
+                {"inicio": "No se pueden agendar citas en fechas u horas pasadas."}
+            )
 
         # 1) inicio < fin
         if fin <= inicio:

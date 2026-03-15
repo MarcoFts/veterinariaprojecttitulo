@@ -26,7 +26,7 @@ export default function VeterinarioLogin() {
     setLoading(true);
 
     try {
-      // 1) Login contra el backend
+      // Login
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
@@ -45,7 +45,6 @@ export default function VeterinarioLogin() {
       // 3) Obtener perfil /auth/me/
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
-      console.log("Respuesta /auth/me/ (vet):", me);
 
       const esVeterinario =
         me?.is_vet === true ||
@@ -76,7 +75,7 @@ export default function VeterinarioLogin() {
       // 5) Navegar al home del veterinario
       navigate("/veterinario/home", { replace: true });
     } catch (err) {
-      console.error("Error en login veterinario:", err?.response?.data || err);
+
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||

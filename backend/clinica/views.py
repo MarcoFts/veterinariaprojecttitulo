@@ -4,12 +4,12 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Q, Count, F
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from .email_utils import enviar_notificacion_cita
 from django.core.mail import EmailMultiAlternatives
 from django.contrib.auth.models import Group
 from django.template.loader import render_to_string
-from rest_framework import viewsets, status, mixins, serializers as drf_serializers
-from rest_framework import serializers, permissions, generics
+from rest_framework import viewsets, status, mixins, serializers, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -52,12 +52,11 @@ from .utils import user_display_name
 
 User = get_user_model()
 
-# ---------- DISPONIBILIDAD ----------
+# Disponibilidad
 def _overlap(a_start, a_end, b_start, b_end) -> bool:
     return a_start < b_end and b_start < a_end
 
-
-# ---------- HELPERS DE ROL ----------
+# Helpers de rol
 def user_is_vet(user):
     """Retorna True si el usuario es veterinario (campo o grupo)."""
     return getattr(user, "is_veterinario", False) or user.groups.filter(
@@ -81,21 +80,6 @@ def _ensure_group(name: str) -> Group:
     g, _ = Group.objects.get_or_create(name=name)
     return g
 
-def _is_admin(user):
-    return user and user.is_authenticated and (user.is_staff or user.is_superuser)
-
-def crear_notificacion(usuario, *, tipo="sistema", titulo="", mensaje="", url="", data=None):
-    if not usuario:
-        return
-    Notificacion.objects.create(
-        usuario=usuario,
-        tipo=tipo,
-        titulo=titulo[:120],
-        mensaje=mensaje or "",
-        url=url or "",
-        data=data or {},
-    )
-
 def _notify_cita(cita, evento: str):
     """
     Crea notificaciones internas (BD) para cliente y veterinario.
@@ -112,8 +96,21 @@ def _notify_cita(cita, evento: str):
     except Exception:
         pass
 
-# ---------- REPORTES DE GESTIÓN ----------
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_root(request):
+    """Respuesta básica para confirmar que el backend está operativo."""
+    return Response({
+        "name": "Vetyon API Backend",
+        "status": "online",
+        "version": "1.1.0",
+        "endpoints": {
+            "api": "/api/",
+            "admin": "/admin/"
+        }
+    })
 
+# Reportes de gestión
 class ReporteAgendaView(APIView):
     """
     Reporte de ocupación de agenda y no-shows en un rango de fechas.
@@ -431,7 +428,7 @@ class ReporteInventarioView(APIView):
 
         return Response(data, status=status.HTTP_200_OK)
 
-# ---------- CLIENTES ----------
+# Clientes
 class ClienteViewSet(viewsets.ModelViewSet):
     serializer_class = ClienteSerializer
     permission_classes = [IsAuthenticated]
@@ -449,7 +446,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
 
 
 
-# ---------- MASCOTAS ----------
+# Mascotas
 class MascotaViewSet(viewsets.ModelViewSet):
     serializer_class = MascotaSerializer
     permission_classes = [IsAuthenticated]
@@ -515,7 +512,7 @@ class MascotaViewSet(viewsets.ModelViewSet):
 
 
 
-# ---------- HORARIOS DE ATENCIÓN ----------
+# Horarios de atención
 class HorarioAtencionViewSet(viewsets.ModelViewSet):
     queryset = HorarioAtencion.objects.all()
     serializer_class = HorarioAtencionSerializer
@@ -564,7 +561,7 @@ class HorarioAtencionViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-# ---------- BLOQUEOS ----------
+# Bloqueos de agenda
 class BloqueoAgendaViewSet(viewsets.ModelViewSet):
 
     queryset = BloqueoAgenda.objects.all()
@@ -611,7 +608,7 @@ class BloqueoAgendaViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("No puedes borrar bloqueos ajenos.")
         instance.delete()
 
-# ---------- CITAS ----------
+# Citas
 class CitaViewSet(viewsets.ModelViewSet):
     queryset = Cita.objects.all().select_related("cliente", "mascota", "veterinario")
     serializer_class = CitaSerializer
@@ -676,8 +673,31 @@ class CitaViewSet(viewsets.ModelViewSet):
             base_qs = base_qs.filter(estado=estado)
 
         return base_qs.order_by("-inicio")
+    # ---------- HIGHER-LEVEL LOCKS PARA CONCURRENCIA ----------
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        # Bloquear al veterinario *antes* de que DRF llame a serializer.is_valid()
+        vet_id = request.data.get("veterinario_id")
+        if vet_id:
+            get_object_or_404(User.objects.select_for_update(), pk=vet_id)
+        return super().create(request, *args, **kwargs)
+
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        # Bloquear la cita y al veterinario *antes* de la validación
+        instance = self.get_object()
+        get_object_or_404(Cita.objects.select_for_update(), pk=instance.pk)
+        
+        req_vet_id = request.data.get("veterinario_id")
+        if req_vet_id and str(req_vet_id) != str(instance.veterinario_id):
+            get_object_or_404(User.objects.select_for_update(), pk=req_vet_id)
+        elif instance.veterinario_id:
+            get_object_or_404(User.objects.select_for_update(), pk=instance.veterinario_id)
+            
+        return super().update(request, *args, **kwargs)
 
     # ---------- CREAR CITA ----------
+    @transaction.atomic
     def perform_create(self, serializer):
         data = self.request.data
 
@@ -686,19 +706,23 @@ class CitaViewSet(viewsets.ModelViewSet):
         veterinario_id = data.get("veterinario_id")
 
         if not cliente_id:
-            raise drf_serializers.ValidationError({"cliente_id": "El cliente es obligatorio."})
+            raise serializers.ValidationError({"cliente_id": "El cliente es obligatorio."})
         if not mascota_id:
-            raise drf_serializers.ValidationError({"mascota_id": "La mascota es obligatoria."})
+            raise serializers.ValidationError({"mascota_id": "La mascota es obligatoria."})
         if not veterinario_id:
-            raise drf_serializers.ValidationError({"veterinario_id": "El veterinario es obligatorio."})
+            raise serializers.ValidationError({"veterinario_id": "El veterinario es obligatorio."})
 
+        # El lock ya se adquirió en create(), aquí solo instanciamos
+        veterinario = get_object_or_404(User, pk=veterinario_id)
         cliente = get_object_or_404(Cliente, pk=cliente_id)
         mascota = get_object_or_404(Mascota, pk=mascota_id)
-        veterinario = get_object_or_404(User, pk=veterinario_id)
 
-        # Validación: un cliente solo puede agendar con sus mascotas
-        if user_is_client(self.request.user) and mascota.cliente_id != cliente.id:
-            raise PermissionDenied("No puedes agendar con una mascota que no es tuya.")
+        # Validación estricta: autoría del cliente y propiedad de la mascota
+        if user_is_client(self.request.user) and not (self.request.user.is_staff or self.request.user.is_superuser):
+            if str(cliente.user_id) != str(self.request.user.id):
+                raise PermissionDenied("No puedes agendar citas a nombre de otro cliente.")
+            if mascota.cliente_id != cliente.id:
+                raise PermissionDenied("No puedes agendar con una mascota que no pertenece a este cliente.")
 
         cita = serializer.save(
             cliente=cliente,
@@ -715,10 +739,37 @@ class CitaViewSet(viewsets.ModelViewSet):
 
         return cita
 
+    @transaction.atomic
+    def perform_update(self, serializer):
+        data = self.request.data
+        u = self.request.user
+        instance = serializer.instance
+
+        # Prevenir IDOR en edición de Cita
+        if user_is_client(u) and not (u.is_staff or u.is_superuser):
+            req_cliente_id = data.get("cliente_id")
+            if req_cliente_id and str(req_cliente_id) != str(instance.cliente_id):
+                raise PermissionDenied("No puedes transferir tu cita a otro cliente.")
+            
+            req_mascota_id = data.get("mascota_id")
+            if req_mascota_id:
+                mascota = get_object_or_404(Mascota, pk=req_mascota_id)
+                if mascota.cliente_id != instance.cliente_id:
+                    raise PermissionDenied("No puedes reasignar con una mascota ajena.")
+
+        # Los locks ya se adquirieron en update()
+        req_vet_id = data.get("veterinario_id")
+        if req_vet_id and str(req_vet_id) != str(instance.veterinario_id):
+            get_object_or_404(User, pk=req_vet_id)
+        
+        serializer.save()
+
     # ---------- ACCIONES ----------
     @action(detail=True, methods=["patch"])
+    @transaction.atomic
     def confirmar(self, request, pk=None):
-        cita = self.get_object()
+        base_cita = self.get_object()
+        cita = get_object_or_404(Cita.objects.select_for_update(), pk=base_cita.pk)
         u = request.user
 
         if not (user_is_vet(u) or u.is_staff or u.is_superuser):
@@ -737,8 +788,10 @@ class CitaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
+    @transaction.atomic
     def cancelar(self, request, pk=None):
-        cita = self.get_object()
+        base_cita = self.get_object()
+        cita = get_object_or_404(Cita.objects.select_for_update(), pk=base_cita.pk)
         u = request.user
 
         if not (user_is_vet(u) or u.is_staff or u.is_superuser):
@@ -757,8 +810,10 @@ class CitaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
+    @transaction.atomic
     def no_asistio(self, request, pk=None):
-        cita = self.get_object()
+        base_cita = self.get_object()
+        cita = get_object_or_404(Cita.objects.select_for_update(), pk=base_cita.pk)
         u = request.user
 
         if not (user_is_vet(u) or u.is_staff or u.is_superuser):
@@ -776,8 +831,12 @@ class CitaViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(cita).data)
 
     @action(detail=True, methods=["patch"])
+    @transaction.atomic
     def reprogramar(self, request, pk=None):
-        cita = self.get_object()
+        base_cita = self.get_object()
+        cita = get_object_or_404(Cita.objects.select_for_update(), pk=base_cita.pk)
+        if cita.veterinario_id:
+            get_object_or_404(User.objects.select_for_update(), pk=cita.veterinario_id)
         u = request.user
 
         if not (user_is_vet(u) or u.is_staff or u.is_superuser):
@@ -1006,7 +1065,7 @@ class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        print(">>> Datos recibidos:", request.data)
+
 
         email = (request.data.get("email") or "").strip().lower()
         password = request.data.get("password") or ""
@@ -1054,7 +1113,7 @@ class RegisterView(APIView):
                 last_name=last_name,
             )
         except Exception as e:
-            print(">>> Error al crear usuario:", e)
+
             return Response({"detail": "Error al crear usuario."}, status=400)
 
         Cliente.objects.update_or_create(
@@ -1101,7 +1160,7 @@ def me(request):
 
 
 
-# ---------- VETERINARIOS ----------
+# Veterinarios
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def veterinarios(request):

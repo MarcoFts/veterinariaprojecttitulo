@@ -22,27 +22,28 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["username"].required = False  # que no bloquee antes del validate
-
+        self.fields["username"].required = False
     def validate(self, attrs):
         email = (attrs.get("email") or "").strip().lower()
-        username = (attrs.get("username") or "").strip()
         password = attrs.get("password")
 
         if not password:
             raise serializers.ValidationError({"password": ["Debes enviar password."]})
 
-        # Si viene email, convertimos a username REAL del usuario
-        if email:
-            user = User.objects.filter(email__iexact=email).first()
-            if not user:
-                raise serializers.ValidationError({"detail": ["Credenciales inválidas."]})
-            attrs["username"] = user.username
+        # Buscar usuario por email
+        user = User.objects.filter(email__iexact=email).first()
+        
+        # Si no hay email en el payload, intentar con el username si viene
+        if not email and "username" in attrs:
+            user = User.objects.filter(username=attrs["username"]).first()
 
-        # Si NO viene email, exige username normal
-        elif not username:
-            raise serializers.ValidationError({"detail": ["Debes enviar email o username."]})
+        if not user:
+             # Por seguridad, mensaje genérico
+             raise serializers.ValidationError({"detail": "No se encontró cuenta con estas credenciales."})
 
+        # Forzar el username correcto para SimpleJWT
+        attrs["username"] = user.username
+        
         return super().validate(attrs)
 
 

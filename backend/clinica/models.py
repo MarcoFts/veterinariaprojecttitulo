@@ -22,6 +22,15 @@ class Cliente(models.Model):
             return full or self.user.username or f"Cliente {self.pk}"
         return f"Cliente {self.pk}"
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rut_dni"],
+                condition=~models.Q(rut_dni=""),
+                name="unique_rut_cliente"
+            )
+        ]
+
 class Veterinario(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -47,6 +56,15 @@ class Veterinario(models.Model):
 
     def __str__(self):
         return f"Vet {self.user.first_name} {self.user.last_name}"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["rut_dni"],
+                condition=~models.Q(rut_dni=""),
+                name="unique_rut_veterinario"
+            )
+        ]
 
 
 class Mascota(models.Model):
@@ -79,10 +97,11 @@ class Mascota(models.Model):
     )
     esterilizado = models.BooleanField(default=False)
     microchip = models.CharField(
-    max_length=2,
-    choices=[("Si", "Si"), ("No", "No")],
-    default="No"
+        max_length=2,
+        choices=[("Si", "Si"), ("No", "No")],
+        default="No"
     )
+    foto = models.ImageField(upload_to="mascotas/", null=True, blank=True)
     notas_salud = models.TextField(blank=True)
 
     def __str__(self):
@@ -290,17 +309,24 @@ class MovimientoInventario(models.Model):
     fecha = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        creating = self.pk is None
-        super().save(*args, **kwargs)
+        from django.db.models import F
+        from django.db import transaction
 
-        # Solo ajustar stock cuando se crea el movimiento
-        if creating:
-            stock_actual = self.producto.stock or 0
-            if self.tipo == "ingreso":
-                self.producto.stock = stock_actual + self.cantidad
-            else:
-                self.producto.stock = stock_actual - self.cantidad
-            self.producto.save(update_fields=["stock"])
+        creating = self.pk is None
+
+        with transaction.atomic():
+            if creating:
+                if self.tipo == "salida":
+                    filas = Producto.objects.filter(
+                        pk=self.producto.pk, stock__gte=self.cantidad
+                    ).update(stock=F("stock") - self.cantidad)
+                    
+                    if filas == 0:
+                        raise ValueError(f"Stock insuficiente para extraer {self.cantidad} de {self.producto.nombre}")
+                elif self.tipo == "ingreso":
+                    Producto.objects.filter(pk=self.producto.pk).update(stock=F("stock") + self.cantidad)
+
+            super().save(*args, **kwargs)
 
     def __str__(self):
         signo = "+" if self.tipo == "ingreso" else "-"

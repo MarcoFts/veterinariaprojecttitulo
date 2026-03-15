@@ -6,6 +6,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+import threading
 
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -121,11 +122,11 @@ class RegisterView(APIView):
                 to=[user.email],
             )
             msg.attach_alternative(html_message, "text/html")
-            msg.send()
+            threading.Thread(target=msg.send, kwargs={'fail_silently': True}, daemon=True).start()
 
         except Exception as e:
             # No bloqueamos el registro si el correo falla
-            print("⚠️ Error enviando correo de bienvenida:", e)
+            pass
 
         return Response(
             {
@@ -187,10 +188,10 @@ class PasswordResetRequestView(APIView):
                 to=[user.email],
             )
             msg.attach_alternative(html_message, "text/html")
-            msg.send()
+            threading.Thread(target=msg.send, kwargs={'fail_silently': True}, daemon=True).start()
 
         except Exception as e:
-            print("⚠️ Error enviando correo de recuperación:", e)
+            pass
             return Response(
                 {"detail": "Error al enviar el correo."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -260,10 +261,10 @@ class PasswordResetConfirmView(APIView):
                 to=[user.email],
             )
             msg.attach_alternative(html_message, "text/html")
-            msg.send()
+            threading.Thread(target=msg.send, kwargs={'fail_silently': True}, daemon=True).start()
 
         except Exception as e:
-            print("⚠️ Error enviando correo de confirmación:", e)
+            pass
 
         return Response(
             {"detail": "Contraseña actualizada correctamente."},

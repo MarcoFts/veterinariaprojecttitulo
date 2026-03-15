@@ -44,7 +44,6 @@ export default function AdminLogin() {
       // 3) Obtener perfil
       const meRes = await api.get("/auth/me/");
       const me = meRes.data;
-      console.log("Respuesta /auth/me/ (admin):", me);
 
       const esAdmin = me?.is_admin === true || me?.is_staff === true || me?.is_superuser === true;
 
@@ -72,7 +71,7 @@ export default function AdminLogin() {
       // 5) Navegar al panel admin
       navigate("/admin/home", { replace: true });
     } catch (err) {
-      console.error("Error en login administrador:", err?.response?.data || err);
+
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||
