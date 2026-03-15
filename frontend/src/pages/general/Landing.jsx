@@ -50,13 +50,23 @@ export default function Landing() {
     const services = [
         {
             title: "Agendamiento Pro",
-            desc: "Evita colisiones con nuestro sistema de bloqueo de concurrencia.",
+            desc: "Evita colisiones con nuestro sistema avanzado de bloqueo de concurrencia.",
             icon: "📅"
         },
         {
+            title: "Historial Clínico",
+            desc: "Fichas digitales seguras para cada paciente, siempre accesibles.",
+            icon: "🧬"
+        },
+        {
             title: "Stock Inteligente",
-            desc: "Alertas automáticas cuando tus insumos críticos se están agotando.",
+            desc: "Control total de inventario con alertas automáticas de reposición.",
             icon: "📦"
+        },
+        {
+            title: "Vencimientos",
+            desc: "Alertas preventivas para insumos y medicamentos próximos a vencer.",
+            icon: "⚠️"
         }
     ];
 
@@ -146,7 +156,7 @@ export default function Landing() {
                         <h2 className="text-2xl md:text-4xl font-bold mb-4">Gestión Eficiente en <span className="text-emerald-600">Tiempo Real</span></h2>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {services.map((s, i) => (
                             <div key={i} className="flex items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
                                 <div className="text-2xl bg-slate-50 p-3 rounded-xl">{s.icon}</div>
