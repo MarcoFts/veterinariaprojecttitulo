@@ -96,6 +96,13 @@ def _notify_cita(cita, evento: str):
     except Exception:
         pass
 
+def _is_admin(user) -> bool:
+    """Helper para verificar si un usuario es staff/admin."""
+    return user.is_authenticated and user.is_staff
+
+# Alias para compatibilidad con dashboard
+user_is_admin = _is_admin
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def api_root(request):
