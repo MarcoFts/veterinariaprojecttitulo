@@ -6,9 +6,9 @@ Este proyecto es un **sistema integral para clínicas veterinarias**, desarrolla
 
 ## ⚡ Tecnologías Principales
 
-- **Backend**: Python 3.11, Django 5.0, Django REST Framework (API REST)
+- **Backend**: Python, Django , Django REST Framework (API REST)
 - **Frontend**: React + Vite + Tailwind CSS
-- **Base de Datos**: PostgreSQL (NeonDB en producción)
+- **Base de Datos**: PostgreSQL
 - **Autenticación**: JWT (JSON Web Tokens)
 - **Infraestructura**: Desplegado en Vercel (Frontend) y Render (Backend)
 
@@ -24,13 +24,15 @@ Puedes probar el sistema utilizando las siguientes credenciales para explorar lo
 | **Veterinario** | `vet@gmail.com` | `vet1234!` |
 | **Cliente** | `cliente@gmail.com` | `cliente123!` |
 
+Esperar un poco a la hora de iniciar sesión para que Render responda.
+
 ---
 
 ## 🛠️ Módulos y Funcionalidades
 
 ### 1. Gestión de Citas y Agenda
 - **Calendario Interactivo**: Visualización de disponibilidad horaria por veterinario.
-- **Concurrencia Blindada**: Uso de bloqueos de base de datos (`select_for_update`) para evitar dobles reservas simultáneas.
+- **Concurrencia Blindada**: Uso de bloqueos de base de datos para evitar dobles reservas simultáneas.
 - **Validación Estricta**: Control de fechas pasadas y solapamiento de horarios.
 
 ### 2. Inventario y Control de Stock
@@ -43,21 +45,13 @@ Puedes probar el sistema utilizando las siguientes credenciales para explorar lo
 
 ---
 
-## 🛡️ Seguridad y Calidad de Código
-
-- **Protección IDOR**: Validación de propiedad de recursos en cada endpoint sensible (Citas, Mascotas).
-- **Arquitectura Limpia**: Separación clara entre lógica de negocio (Backend) e interfaz de usuario (Frontend).
-- **Hardening de API**: Implementación de restricciones de seguridad y normalización de rutas para producción.
-
----
-
 ## 📦 Estructura del Proyecto
 
 ```text
 VeterinariaProyecto/
-│── backend/       # API REST en Django (Hardened & Cleaned)
+│── backend/       # API REST en Django 
 │   ├── config/    # Configuración de Producción & Seguridad
-│   └── clinica/   # Lógica de Negocio (Modelos, Views, Serializers)
+│   └── clinica/   # Lógica de Negocio
 │
 │── frontend/      # Interfaz SPA en React + Vite
 ```
