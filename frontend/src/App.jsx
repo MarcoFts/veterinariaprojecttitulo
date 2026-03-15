@@ -42,14 +42,17 @@ import AdminMotivos from "./pages/administrador/AdminMotivos";
 import AdminMovimientos from "./pages/administrador/AdminMovimientos";
 import AdminUsuarios from "./pages/administrador/AdminUsuarios";
 
+// General
+import Landing from "./pages/general/Landing";
+
 function App() {
   return (
     <Routes>
       {/* Root */}
-      <Route path="/" element={<Navigate to="/seleccion-login" replace />} />
+      <Route path="/" element={<Landing />} />
 
-      {/* Selección */}
-      <Route path="/seleccion-login" element={<SeleccionLogin />} />
+      {/* Redirecciones de compatibilidad */}
+      <Route path="/seleccion-login" element={<Navigate to="/" replace />} />
 
       {/* Registro */}
       <Route path="/registro" element={<Registro />} />
@@ -196,7 +199,7 @@ function App() {
           <Route path="inventario" element={<AdminInventario />} />
           <Route path="movimientos" element={<AdminMovimientos />} />
           <Route path="motivos" element={<AdminMotivos />} />
-          <Route path="usuarios" element={<AdminUsuarios />} /> 
+          <Route path="usuarios" element={<AdminUsuarios />} />
         </Route>
       </Route>
 

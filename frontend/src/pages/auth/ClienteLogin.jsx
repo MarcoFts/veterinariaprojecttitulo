@@ -72,7 +72,7 @@ export default function ClienteLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-slate-100 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
 
         {/* ENCABEZADO */}
