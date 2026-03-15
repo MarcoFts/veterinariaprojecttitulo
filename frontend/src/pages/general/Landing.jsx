@@ -7,255 +7,248 @@ import {
     Heart,
     Calendar,
     Package,
-    CheckCircle2,
     ChevronRight,
     Menu,
-    X
+    X,
+    ArrowRight
 } from "lucide-react";
 
 export default function Landing() {
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
-    // Colores corporativos
-    const colors = {
-        primary: "sky",
-        secondary: "emerald",
-        accent: "blue",
-        neutral: "slate"
-    };
-
     const roles = [
         {
             id: "cliente",
-            title: "Clínica Pet",
-            description: "Gestiona las citas de tus mascotas y revisa su historial desde cualquier lugar.",
+            title: "Para Mascotas",
+            price: "Acceso Gratuito",
+            description: "Gestiona las citas de tus mascotas y revisa su historial médico.",
+            features: ["Agendamiento online", "Historial de vacunas", "Perfil de mascotas"],
             icon: <User className="h-6 w-6" />,
             color: "bg-sky-500",
-            lightColor: "bg-sky-50",
-            textColor: "text-sky-600",
+            buttonColor: "border-sky-500 text-sky-600 hover:bg-sky-500 hover:text-white",
             target: "/login/cliente"
         },
         {
             id: "veterinario",
-            title: "Portal Veterinario",
-            description: "Toma el control de tu agenda, pacientes y fichas clínicas con herramientas avanzadas.",
+            title: "Para Especialistas",
+            price: "Portal Clínico",
+            description: "Toma el control de tu agenda y fichas clínicas avanzadas.",
+            features: ["Agenda interactiva", "Fichas clínicas pro", "Gestión de pacientes"],
             icon: <Stethoscope className="h-6 w-6" />,
             color: "bg-emerald-500",
-            lightColor: "bg-emerald-50",
-            textColor: "text-emerald-600",
+            buttonColor: "border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white",
             target: "/login/veterinario"
         },
         {
             id: "admin",
-            title: "Administración Total",
-            description: "Control centralizado de inventario, usuarios y movimientos del sistema.",
+            title: "Administración",
+            price: "Control Total",
+            description: "Gestión centralizada de inventario y seguridad del sistema.",
+            features: ["Control de stock", "Gestión de usuarios", "Reportes de gestión"],
             icon: <Shield className="h-6 w-6" />,
             color: "bg-slate-800",
-            lightColor: "bg-slate-100",
-            textColor: "text-slate-800",
+            buttonColor: "border-slate-800 text-slate-800 hover:bg-slate-800 hover:text-white",
             target: "/login/admin"
         }
     ];
 
-    const features = [
+    const services = [
         {
-            title: "Agenda Inteligente",
-            desc: "Optimiza tus tiempos con un calendario profesional y bloqueo de colisiones.",
-            icon: <Calendar className="h-8 w-8 text-sky-500" />
+            title: "Agendamiento Pro",
+            desc: "Evita colisiones con nuestro sistema de bloqueo de concurrencia.",
+            icon: "📅"
         },
         {
-            title: "Inventario en Tiempo Real",
-            desc: "Alertas automáticas de stock bajo y control total de insumos médicos.",
-            icon: <Package className="h-8 w-8 text-emerald-500" />
-        },
-        {
-            title: "Ficha Médica Segura",
-            desc: "Historial completo y seguro para cada paciente, siempre accesible.",
-            icon: <Heart className="h-8 w-8 text-rose-500" />
+            title: "Stock Inteligente",
+            desc: "Alertas automáticas cuando tus insumos críticos se están agotando.",
+            icon: "📦"
         }
     ];
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-['Outfit']">
+        <div className="min-h-screen bg-[#fffdfa] text-slate-900 font-['Fredoka'] overflow-x-hidden">
 
-            {/* NAVBAR */}
-            <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+            {/* HEADER / NAVBAR */}
+            <header className="fixed top-0 w-full z-50 bg-[#334155]/10 backdrop-blur-lg border-b border-slate-200">
                 <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-sky-600 p-2 rounded-xl">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-sky-600 p-2 rounded-[1rem] shadow-lg shadow-sky-200">
                             <Shield className="h-6 w-6 text-white" />
                         </div>
                         <span className="text-2xl font-bold tracking-tight text-slate-900">Vetyon</span>
                     </div>
 
-                    {/* Desktop Nav */}
-                    <div className="hidden md:flex items-center gap-8">
-                        <a href="#inicio" className="text-sm font-medium text-slate-600 hover:text-sky-600 transition-colors">Inicio</a>
-                        <a href="#servicios" className="text-sm font-medium text-slate-600 hover:text-sky-600 transition-colors">Servicios</a>
-                        <a href="#roles" className="text-sm font-medium text-slate-600 hover:text-sky-600 transition-colors">Accesos</a>
+                    <nav className="hidden md:flex items-center gap-10">
+                        <a href="#services" className="text-sm font-semibold hover:text-sky-600 transition-colors">Servicios</a>
+                        <a href="#pricing" className="text-sm font-semibold hover:text-sky-600 transition-colors">Accesos</a>
                         <button
-                            onClick={() => document.getElementById('roles')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="bg-slate-900 text-white px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
+                            onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+                            className="bg-slate-900 text-white px-8 py-3 rounded-full text-sm font-bold hover:scale-105 transition-transform shadow-xl"
                         >
-                            Comenzar ahora
+                            Comenzar →
                         </button>
-                    </div>
+                    </nav>
 
-                    {/* Mobile Menu Button */}
-                    <button className="md:hidden p-2 text-slate-600" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                    <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                         {isMenuOpen ? <X /> : <Menu />}
                     </button>
                 </div>
+            </header>
 
-                {/* Mobile Menu */}
-                {isMenuOpen && (
-                    <div className="md:hidden bg-white border-b border-slate-200 p-6 flex flex-col gap-4 animate-fadeScale">
-                        <a href="#inicio" className="text-lg font-medium" onClick={() => setIsMenuOpen(false)}>Inicio</a>
-                        <a href="#servicios" className="text-lg font-medium" onClick={() => setIsMenuOpen(false)}>Servicios</a>
-                        <a href="#roles" className="text-lg font-medium" onClick={() => setIsMenuOpen(false)}>Accesos</a>
-                        <button
-                            onClick={() => {
-                                setIsMenuOpen(false);
-                                document.getElementById('roles')?.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                            className="bg-sky-600 text-white px-6 py-3 rounded-xl font-semibold"
-                        >
-                            Comenzar ahora
-                        </button>
-                    </div>
-                )}
-            </nav>
+            {/* HERO SECTION - Inspired by CarePaw dark burgundy but using Slate/Sky */}
+            <section className="pt-32 pb-20 px-4 md:px-6">
+                <div className="max-w-7xl mx-auto bg-slate-900 rounded-[3rem] md:rounded-[4rem] p-10 md:p-24 relative overflow-hidden text-center text-white shadow-2xl">
+                    {/* Dot Pattern Overlay */}
+                    <div className="absolute inset-0 bg-dot-pattern text-white/5 opacity-40 pointer-events-none" />
 
-            {/* HERO SECTION */}
-            <section id="inicio" className="pt-40 pb-20 px-6 relative overflow-hidden">
-                {/* Decorative Blobs */}
-                <div className="absolute top-20 -left-20 w-72 h-72 bg-sky-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" />
-                <div className="absolute top-40 -right-20 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" />
+                    <div className="relative z-10 flex flex-col items-center">
+                        <div className="bg-white/10 border border-white/20 px-6 py-2 rounded-full mb-10 backdrop-blur-sm">
+                            <span className="text-sm font-bold tracking-wide">¡Bienvenidos a Vetyon! 🐾</span>
+                        </div>
 
-                <div className="max-w-7xl mx-auto text-center relative z-10">
-                    <div className="inline-flex items-center gap-2 bg-sky-50 border border-sky-100 rounded-full px-4 py-1.5 mb-8 animate-fadeScale">
-                        <CheckCircle2 className="h-4 w-4 text-sky-600" />
-                        <span className="text-sm font-semibold text-sky-700">Plataforma Veterinaria 2025</span>
-                    </div>
+                        <h1 className="text-5xl md:text-8xl font-bold leading-[1.05] mb-8 max-w-4xl">
+                            Cuidado Tecnológico para <span className="text-sky-400">Tus Mascotas</span>
+                        </h1>
 
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-slate-900 mb-6 leading-[1.1]">
-                        El Futuro de la <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-600 to-emerald-600">Gestión Veterinaria</span>
-                    </h1>
+                        <p className="text-lg md:text-xl text-slate-300 max-w-2xl mb-12 leading-relaxed">
+                            La plataforma integral que une a veterinarios, administradores y dueños de mascotas en un solo ecosistema digital seguro y moderno.
+                        </p>
 
-                    <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-600 mb-10 leading-relaxed">
-                        Optimiza tu clínica con Vetyon. Agenda citas con precisión, gestiona tu inventario en tiempo real y ofrece la mejor atención a tus pacientes.
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                        <button
-                            onClick={() => document.getElementById('roles')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="w-full sm:w-auto bg-sky-600 text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-sky-700 transition-all shadow-xl shadow-sky-200 flex items-center justify-center gap-2 group"
-                        >
-                            Ingresar al sistema
-                            <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                        </button>
-                        <button
-                            onClick={() => document.getElementById('servicios')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="w-full sm:w-auto bg-white text-slate-900 px-8 py-4 rounded-full text-lg font-bold border border-slate-200 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-                        >
-                            Ver características
-                        </button>
-                    </div>
-
-                    {/* Trusted Badges */}
-                    <div className="mt-20 pt-10 border-t border-slate-200/60 max-w-4xl mx-auto">
-                        <p className="text-sm font-semibold text-slate-400 uppercase tracking-widest mb-8">Tecnología de Vanguardia</p>
-                        <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-40 grayscale hover:grayscale-0 transition-all duration-500">
-                            <span className="text-xl font-bold">Django REST</span>
-                            <span className="text-xl font-bold">React Vite</span>
-                            <span className="text-xl font-bold">PostgreSQL</span>
-                            <span className="text-xl font-bold">Tailwind CSS</span>
+                        <div className="flex flex-col sm:flex-row gap-5">
+                            <button
+                                onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="bg-sky-500 hover:bg-sky-400 text-white px-10 py-5 rounded-full text-lg font-bold shadow-2xl transition-all hover:scale-105 flex items-center gap-2"
+                            >
+                                Hacer una Reserva <ArrowRight className="h-5 w-5" />
+                            </button>
+                            <button
+                                onClick={() => document.getElementById('services')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="bg-transparent border-2 border-white/30 hover:border-white text-white px-10 py-5 rounded-full text-lg font-bold transition-all"
+                            >
+                                Ver Servicios
+                            </button>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* FEATURES SECTION */}
-            <section id="servicios" className="py-24 px-6 bg-white relative">
+            {/* SERVICES PREVIEW - Overlapping Layout */}
+            <section id="services" className="py-20 px-6 bg-[#ffecbc]/30">
+                <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                    <div>
+                        <div className="bg-emerald-100 text-emerald-700 px-5 py-2 rounded-full inline-block font-bold text-sm mb-6">
+                            ¿Por qué elegirnos? 🐱
+                        </div>
+                        <h2 className="text-4xl md:text-6xl font-bold mb-8 leading-tight">
+                            Emergencias y Cuidado Preventivo en <span className="text-emerald-600">Tiempo Real.</span>
+                        </h2>
+                        <p className="text-lg text-slate-600 mb-10 leading-relaxed">
+                            Nuestro sistema garantiza que cada paciente reciba atención oportuna gracias a la gestión inteligente de agenda y el control estricto de insumos médicos.
+                        </p>
+
+                        <div className="space-y-6">
+                            {services.map((s, i) => (
+                                <div key={i} className="flex items-start gap-5">
+                                    <div className="text-3xl bg-white p-4 rounded-2xl shadow-sm border border-slate-100">{s.icon}</div>
+                                    <div>
+                                        <h4 className="text-xl font-bold mb-1">{s.title}</h4>
+                                        <p className="text-slate-500">{s.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="relative">
+                        <div className="bg-white p-6 rounded-[3rem] shadow-2xl border-8 border-[#ffecbc]">
+                            <img
+                                src="https://images.unsplash.com/photo-1584132967334-10e028bd69f7?q=80&w=2070&auto=format&fit=crop"
+                                alt="Veterinaria"
+                                className="rounded-[2.5rem] w-full h-[400px] object-cover"
+                            />
+                        </div>
+                        {/* Badge Overlapping */}
+                        <div className="absolute -bottom-10 -left-10 bg-slate-900 text-white p-8 rounded-[2rem] shadow-2xl hidden md:block max-w-[250px] animate-bounce-slow">
+                            <p className="text-3xl font-bold mb-1">100%</p>
+                            <p className="text-sm opacity-70">Disponibilidad y seguridad en tus datos clínicos.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* PRICING / ROLES SECTION - The "Cards" style from CarePaw */}
+            <section id="pricing" className="py-24 px-6 relative bg-white">
                 <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-16">
-                        <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-4">Herramientas Pro para tu Clínica</h2>
-                        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-                            Diseñado específicamente para las necesidades de hoy, unificando todos tus procesos en un solo lugar.
+                        <h2 className="text-4xl md:text-6xl font-bold mb-6">Configuraciones de <span className="text-sky-600">Acceso</span></h2>
+                        <p className="text-slate-500 max-w-xl mx-auto">
+                            Planes adaptados para cada miembro del equipo y dueños de mascotas.
                         </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {features.map((f, i) => (
-                            <div key={i} className="p-10 rounded-3xl border border-slate-100 bg-[#fbfcfd] hover:shadow-2xl hover:shadow-sky-100 transition-all duration-300 group">
-                                <div className="mb-6 bg-white p-4 inline-block rounded-2xl shadow-sm border border-slate-50 group-hover:scale-110 transition-transform">
-                                    {f.icon}
+                        {roles.map((r) => (
+                            <div
+                                key={r.id}
+                                className="bg-white border-2 border-slate-100 rounded-[3.5rem] p-10 flex flex-col items-center text-center hover:border-sky-200 transition-all group"
+                            >
+                                <span className="text-4xl font-bold text-slate-800 mb-2">{r.price}</span>
+                                <span className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">{r.title}</span>
+
+                                <div className={`${r.color} w-full h-48 rounded-[2.5rem] flex items-center justify-center mb-8 relative overflow-hidden`}>
+                                    <div className="absolute inset-0 bg-dot-pattern opacity-10" />
+                                    <div className="bg-white/20 p-6 rounded-3xl backdrop-blur-sm">
+                                        {React.cloneElement(r.icon, { className: "h-12 w-12 text-white" })}
+                                    </div>
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-3">{f.title}</h3>
-                                <p className="text-slate-500 leading-relaxed">{f.desc}</p>
+
+                                <div className="space-y-4 mb-10 w-full">
+                                    {r.features.map((f, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 text-slate-600 justify-center">
+                                            <div className="h-2 w-2 rounded-full bg-slate-900" />
+                                            <span className="text-sm font-medium">{f}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    onClick={() => navigate(r.target)}
+                                    className={`w-full py-4 rounded-full border-2 font-bold transition-all flex items-center justify-center gap-2 ${r.buttonColor}`}
+                                >
+                                    Elegir Plan <ChevronRight className="h-5 w-5" />
+                                </button>
                             </div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* ROLES / ACCESS SECTION */}
-            <section id="roles" className="py-24 px-6 bg-gradient-to-b from-white to-slate-50 relative">
-                <div className="max-w-6xl mx-auto">
-                    <div className="bg-slate-900 rounded-[3rem] p-8 md:p-20 relative overflow-hidden shadow-2xl">
-                        {/* Background pattern */}
-                        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,#0ea5e9,transparent_70%)]" />
-
-                        <div className="relative z-10 text-center mb-16">
-                            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">Elige tu puerta de entrada</h2>
-                            <p className="text-lg text-slate-400 max-w-xl mx-auto">
-                                Selecciona tu perfil de usuario para acceder a las herramientas correspondientes.
-                            </p>
+            {/* FOOTER - Inspired by CarePaw dark footer */}
+            <footer className="bg-slate-900 text-white pt-20 pb-10 px-6 mt-10 rounded-t-[4rem]">
+                <div className="max-w-7xl mx-auto flex flex-col items-center gap-12">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="bg-sky-600 p-3 rounded-2xl">
+                            <Shield className="h-8 w-8" />
                         </div>
+                        <h2 className="text-4xl font-bold tracking-tighter">Vetyon</h2>
+                    </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative z-10">
-                            {roles.map((r) => (
-                                <div
-                                    key={r.id}
-                                    className="bg-white/5 backdrop-blur-sm border border-white/10 p-8 rounded-[2rem] hover:bg-white/10 transition-all group flex flex-col justify-between"
-                                >
-                                    <div>
-                                        <div className={`${r.color} h-12 w-12 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-black/20`}>
-                                            {r.icon}
-                                        </div>
-                                        <h3 className="text-xl font-bold text-white mb-3">{r.title}</h3>
-                                        <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                                            {r.description}
-                                        </p>
-                                    </div>
-                                    <button
-                                        onClick={() => navigate(r.target)}
-                                        className="w-full bg-white text-slate-900 py-4 rounded-2xl font-bold hover:bg-sky-50 transition-colors flex items-center justify-center gap-2 group/btn"
-                                    >
-                                        Ingresar
-                                        <ChevronRight className="h-5 w-5 group-hover/btn:translate-x-1 transition-transform" />
-                                    </button>
-                                </div>
-                            ))}
+                    <nav className="flex flex-wrap justify-center gap-10 md:gap-20 text-slate-400 font-bold uppercase tracking-widest text-xs">
+                        <a href="#" className="hover:text-white transition-colors">Nosotros</a>
+                        <a href="#" className="hover:text-white transition-colors">Módulos</a>
+                        <a href="#" className="hover:text-white transition-colors">Soporte</a>
+                        <a href="#" className="hover:text-white transition-colors">Privacidad</a>
+                    </nav>
+
+                    <div className="w-full h-[1px] bg-white/10" />
+
+                    <div className="flex flex-col md:flex-row justify-between w-full items-center gap-6 text-slate-500 text-sm">
+                        <p>© 2025 Vetyon. Potenciado por el cuidado a las mascotas.</p>
+                        <div className="flex gap-6">
+                            <span>LinkedIn</span>
+                            <span>GitHub</span>
                         </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* FOOTER */}
-            <footer className="py-12 px-6 border-t border-slate-200 bg-white">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="flex items-center gap-2">
-                        <Shield className="h-5 w-5 text-sky-600" />
-                        <span className="text-lg font-bold text-slate-900">Vetyon</span>
-                    </div>
-                    <p className="text-sm text-slate-500">
-                        &copy; 2025 Vetyon Plataforma Veterinaria. Todos los derechos reservados.
-                    </p>
-                    <div className="flex gap-6">
-                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors">Privacidad</a>
-                        <a href="#" className="text-sm text-slate-400 hover:text-slate-900 transition-colors">Soporte</a>
                     </div>
                 </div>
             </footer>
