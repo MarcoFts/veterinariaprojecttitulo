@@ -188,6 +188,26 @@ class VetCareLoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        portal = (request.data.get("portal") or "").strip().lower()
+        if portal == "admin" and not _user_is_admin(user):
+            log_mfa_event("LOGIN_PORTAL_DENIED", "FAILURE", user=user, request=request, metadata={"portal": "admin"})
+            return Response(
+                {"detail": "Esta cuenta no tiene permisos de administrador."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if portal == "veterinario" and not (_user_is_vet(user) or _user_is_admin(user)):
+            log_mfa_event("LOGIN_PORTAL_DENIED", "FAILURE", user=user, request=request, metadata={"portal": "veterinario"})
+            return Response(
+                {"detail": "Esta cuenta no tiene permiso de veterinario."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if portal == "cliente" and not getattr(user, "cliente", None):
+            log_mfa_event("LOGIN_PORTAL_DENIED", "FAILURE", user=user, request=request, metadata={"portal": "cliente"})
+            return Response(
+                {"detail": "Esta cuenta no está registrada como cliente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         state, mfa_profile, _policy = _classify_mfa_state(user, request)
 
         if state in {"S0", "S3"}:

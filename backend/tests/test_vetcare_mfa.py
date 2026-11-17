@@ -44,6 +44,16 @@ def admin_user():
 
 
 def test_s0_disabled_and_s1_grace_postpone_vs_s2_mandatory(api, vet_user):
+    # ADM-02: usuario sin rol admin en portal admin recibe 403 en el paso 1 sin revelar estado 2FA
+    api.credentials()
+    adm_denied = api.post(
+        "/api/auth/login/",
+        {"email": "vet_mfa_test@clinica.local", "password": "VetPassword123!", "portal": "admin"},
+        format="json",
+    )
+    assert adm_denied.status_code == 403
+    assert "mfa_token" not in adm_denied.data
+
     # S1: usuario nuevo entra en gracia de 15 días -> can_postpone=True
     r1 = api.post(
         "/api/auth/login/",

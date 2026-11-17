@@ -68,6 +68,7 @@ export default function VeterinarioLogin() {
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
+        portal: "veterinario",
       });
 
       const data = res.data;

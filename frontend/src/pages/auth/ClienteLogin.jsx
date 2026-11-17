@@ -57,7 +57,7 @@ export default function ClienteLogin() {
     setLoading(true);
 
     try {
-      const resp = await apiLogin(form.email, form.password);
+      const resp = await apiLogin(form.email, form.password, "cliente");
       if (
         resp.data?.status === "MFA_REQUIRED" ||
         resp.data?.status === "MFA_ENROLL_REQUIRED"

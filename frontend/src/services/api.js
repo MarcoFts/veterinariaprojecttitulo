@@ -22,8 +22,8 @@ api.interceptors.request.use((config) => {
 });
 
 // Login
-export const login = (email, password) =>
-  api.post("/auth/login/", { email, password });
+export const login = (email, password, portal = undefined) =>
+  api.post("/auth/login/", portal ? { email, password, portal } : { email, password });
 
 // Refresh automático en 401
 let refreshingPromise = null;

@@ -65,6 +65,7 @@ export default function AdminLogin() {
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
+        portal: "admin",
       });
 
       const data = res.data;
