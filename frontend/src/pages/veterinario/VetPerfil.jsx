@@ -1,6 +1,7 @@
 // src/pages/veterinario/VetPerfil.jsx
 import { useEffect, useRef, useState } from "react";
 import LayoutVet from "../../components/layout/LayoutVet";
+import MfaProfileSection from "../../components/mfa/MfaProfileSection";
 import { me, updateVetProfile } from "../../services/api";
 import { Save } from "lucide-react";
 
@@ -328,6 +329,10 @@ export default function VetPerfil() {
             {saving ? "Guardando..." : "Guardar cambios"}
           </button>
         </form>
+
+        <div className="mt-6">
+          <MfaProfileSection />
+        </div>
       </div>
     </LayoutVet>
   );

@@ -2,6 +2,7 @@
 import { Outlet } from "react-router-dom";
 import SidebarAdmin from "./SidebarAdmin";
 import NotificationBell from "../notifications/NotificationBell";
+import MfaGraceBanner from "../mfa/MfaGraceBanner";
 import { ShieldCheck } from "lucide-react";
 
 export default function LayoutAdmin() {
@@ -13,6 +14,7 @@ export default function LayoutAdmin() {
       {/* Contenido */}
       <main className="flex-1 overflow-y-auto">
         {/* Topbar */}
+        <MfaGraceBanner profilePath="/admin/perfil" />
         <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="px-4 md:px-8 py-4">
             <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">

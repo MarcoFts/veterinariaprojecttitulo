@@ -41,6 +41,8 @@ import AdminInventario from "./pages/administrador/AdminInventario";
 import AdminMotivos from "./pages/administrador/AdminMotivos";
 import AdminMovimientos from "./pages/administrador/AdminMovimientos";
 import AdminUsuarios from "./pages/administrador/AdminUsuarios";
+import AdminMfa from "./pages/administrador/AdminMfa";
+import AdminPerfil from "./pages/administrador/AdminPerfil";
 
 // General
 import Landing from "./pages/general/Landing";
@@ -200,6 +202,8 @@ function App() {
           <Route path="movimientos" element={<AdminMovimientos />} />
           <Route path="motivos" element={<AdminMotivos />} />
           <Route path="usuarios" element={<AdminUsuarios />} />
+          <Route path="mfa" element={<AdminMfa />} />
+          <Route path="perfil" element={<AdminPerfil />} />
         </Route>
       </Route>
 

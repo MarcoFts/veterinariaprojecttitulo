@@ -44,7 +44,7 @@ export default function NavbarCliente() {
   };
 
   return (
-    <header className="z-[5] bg-white/70 border-b border-white/40 shadow-sm">
+    <header className="relative z-40 bg-white/70 border-b border-white/40 shadow-sm">
       <nav className="w-full px-4 py-3 flex items-center justify-between gap-4">
         {/* LOGO */}
         <Link to="/cliente/home" className="flex items-center gap-2">

@@ -28,57 +28,8 @@ User = get_user_model()
 
 
 # =========================================================
-# LOGIN JWT CON EMAIL
+# LOGIN JWT CON EMAIL (delegado a clinica.mfa_views.VetCareLoginView)
 # =========================================================
-class EmailTokenObtainPairView(TokenObtainPairView):
-    serializer_class = EmailTokenObtainPairSerializer
-
-
-class LoginView(APIView):
-    permission_classes = [permissions.AllowAny]
-    authentication_classes = []
-
-    def post(self, request):
-        email = (request.data.get("email") or "").strip().lower()
-        password = request.data.get("password") or ""
-
-        if not email:
-            return Response({"email": ["Este campo es requerido."]}, status=400)
-        if not password:
-            return Response({"password": ["Este campo es requerido."]}, status=400)
-
-        user = User.objects.filter(email__iexact=email).first()
-        if not user:
-            return Response(
-                {"detail": "No existe una cuenta con ese correo."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        if not user.is_active:
-            return Response(
-                {"detail": "Usuario inactivo."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        if not user.has_usable_password() or not check_password(password, user.password):
-            return Response(
-                {"detail": "Credenciales inválidas."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                },
-            },
-            status=status.HTTP_200_OK,
-        )
 
 
 # =========================================================

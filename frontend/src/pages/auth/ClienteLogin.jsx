@@ -4,6 +4,7 @@ import { useNavigate, Link } from "react-router-dom";
 import api, { login as apiLogin } from "../../services/api";
 import { setTokens } from "../../auth";
 import { useAuth } from "../../context/AuthContext";
+import MfaFlowHandler from "../../components/mfa/MfaFlowHandler";
 
 export default function ClienteLogin() {
   const navigate = useNavigate();
@@ -12,9 +13,43 @@ export default function ClienteLogin() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null);
 
   const handleChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+
+  const finalizeLogin = async (sessionData) => {
+    const { access, refresh } = sessionData;
+    if (!access) {
+      setError("No se recibió token de acceso. Revisa credenciales.");
+      return;
+    }
+
+    setTokens({ access, refresh });
+
+    const meRes = await api.get("/auth/me/");
+    const me = meRes.data;
+
+    localStorage.setItem("cliente_id", me.cliente_id);
+
+    if (!me?.cliente_id) {
+      setError("Esta cuenta no está registrada como cliente.");
+      return;
+    }
+
+    const userParaContexto = {
+      id: me.id,
+      email: me.email,
+      nombre: me.name,
+      rol: "cliente",
+      cliente_id: me.cliente_id,
+      is_vet: me.is_vet,
+      is_staff: me.is_staff,
+    };
+
+    setAuthUser(userParaContexto);
+    navigate("/cliente/home", { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,42 +58,16 @@ export default function ClienteLogin() {
 
     try {
       const resp = await apiLogin(form.email, form.password);
-      const { access, refresh } = resp.data;
-
-      if (!access) {
-        setError("No se recibió token de acceso. Revisa credenciales.");
+      if (
+        resp.data?.status === "MFA_REQUIRED" ||
+        resp.data?.status === "MFA_ENROLL_REQUIRED"
+      ) {
+        setMfaChallenge(resp.data);
         setLoading(false);
         return;
       }
 
-      setTokens({ access, refresh });
-
-      const meRes = await api.get("/auth/me/");
-      const me = meRes.data;
-
-      // GUARDA cliente_id EN LOCALSTORAGE (OBLIGATORIO)
-      localStorage.setItem("cliente_id", me.cliente_id);
-
-
-      if (!me?.cliente_id) {
-        setError("Esta cuenta no está registrada como cliente.");
-        setLoading(false);
-        return;
-      }
-
-      const userParaContexto = {
-        id: me.id,
-        email: me.email,
-        nombre: me.name,
-        rol: "cliente",
-        cliente_id: me.cliente_id,
-        is_vet: me.is_vet,
-        is_staff: me.is_staff,
-      };
-
-      setAuthUser(userParaContexto);
-
-      navigate("/cliente/home", { replace: true });
+      await finalizeLogin(resp.data);
     } catch (err) {
       console.error("Error en login cliente:", err?.response?.data || err);
       const msg =
@@ -70,6 +79,16 @@ export default function ClienteLogin() {
       setLoading(false);
     }
   };
+
+  if (mfaChallenge) {
+    return (
+      <MfaFlowHandler
+        challenge={mfaChallenge}
+        onAuthenticated={finalizeLogin}
+        onCancel={() => setMfaChallenge(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-slate-100 flex items-center justify-center px-4 py-10">

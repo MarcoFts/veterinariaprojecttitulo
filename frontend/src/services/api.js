@@ -8,7 +8,8 @@ import {
 } from "../auth";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
+  withCredentials: true,
 });
 
 // Interceptor request: adjunta Authorization
@@ -53,7 +54,7 @@ api.interceptors.response.use(
       try {
         if (!refreshingPromise) {
           const plain = axios.create({
-            baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
+            baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
           });
           refreshingPromise = plain.post("/auth/refresh/", { refresh });
         }
@@ -313,3 +314,48 @@ export const leerNotificacion = (id) =>
 
 export const marcarTodasLeidas = () =>
   api.post("/notificaciones/marcar_todas_leidas/").then(r => r.data);
+
+// ---------- MFA / DOBLE FACTOR (MEJ-02) ----------
+export const mfaVerify = (mfaToken, code, rememberDevice = false) =>
+  api.post(
+    "/auth/mfa/verify/",
+    { code, remember_device: rememberDevice },
+    { headers: { Authorization: `Bearer ${mfaToken}` } }
+  );
+
+export const mfaEnrollStart = (mfaToken) =>
+  api.post(
+    "/auth/mfa/enroll/start/",
+    {},
+    mfaToken ? { headers: { Authorization: `Bearer ${mfaToken}` } } : {}
+  );
+
+export const mfaEnrollConfirm = (mfaToken, code) =>
+  api.post(
+    "/auth/mfa/enroll/confirm/",
+    { code },
+    mfaToken ? { headers: { Authorization: `Bearer ${mfaToken}` } } : {}
+  );
+
+export const mfaEnrollPostpone = (mfaToken) =>
+  api.post(
+    "/auth/mfa/enroll/postpone/",
+    {},
+    { headers: { Authorization: `Bearer ${mfaToken}` } }
+  );
+
+export const mfaStatus = () => api.get("/auth/mfa/status/");
+
+export const mfaRevokeDevice = (id) => api.delete(`/auth/mfa/trusted-devices/${id}/`);
+
+export const mfaRegenerateRecovery = (password) =>
+  api.post("/auth/mfa/recovery-codes/regenerate/", { password });
+
+export const adminMfaApi = {
+  getSettings: () => api.get("/admin/mfa/settings/"),
+  updateSettings: (payload) => api.patch("/admin/mfa/settings/", payload),
+  listUsers: (q = "") => api.get("/admin/mfa/users/", { params: q ? { q } : {} }),
+  resetUser: (targetUserId, reason) =>
+    api.post("/admin/mfa/reset/", { targetUserId, reason }),
+  listResetLog: (params = {}) => api.get("/admin/mfa/reset-log/", { params }),
+};

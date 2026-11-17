@@ -73,6 +73,16 @@ export default function SidebarAdmin() {
             <Users className="h-4 w-4" />
             Usuarios
           </NavLink>
+
+          <NavLink to="/admin/mfa" className={linkClass}>
+            <ShieldCheck className="h-4 w-4" />
+            Seguridad MFA
+          </NavLink>
+
+          <NavLink to="/admin/perfil" className={linkClass}>
+            <Users className="h-4 w-4" />
+            Mi Perfil
+          </NavLink>
         </nav>
 
         {/* FOOTER */}

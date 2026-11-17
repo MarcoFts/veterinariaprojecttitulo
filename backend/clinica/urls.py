@@ -1,7 +1,21 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from clinica.auth_views import EmailTokenObtainPairView
+from clinica.mfa_views import (
+    AdminMfaResetLogView,
+    AdminMfaResetView,
+    AdminMfaSettingsView,
+    AdminMfaUsersView,
+    MfaEnrollConfirmView,
+    MfaEnrollPostponeView,
+    MfaEnrollStartView,
+    MfaLogoutView,
+    MfaRegenerateRecoveryView,
+    MfaStatusView,
+    MfaTrustedDeviceRevokeView,
+    MfaVerifyView,
+    VetCareLoginView,
+)
 
 from .views import (
     disponibilidad,
@@ -30,7 +44,6 @@ from .views import (
 
 # Vistas de autenticación
 from .auth_views import (
-    LoginView,  # si no lo usas lo puedes borrar
     RegisterView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
@@ -64,9 +77,21 @@ urlpatterns = [
     # Endpoints principales
     path("api/", include(router.urls)),
 
-    # Autenticación y JWT
+    # Autenticación y JWT (con flujo MFA MEJ-02)
     path("api/auth/register/", RegisterView.as_view(), name="register"),
-    path("api/auth/login/", EmailTokenObtainPairView.as_view(), name="login_email"),
+    path("api/auth/login/", VetCareLoginView.as_view(), name="login_email"),
+    path("api/auth/logout/", MfaLogoutView.as_view(), name="logout"),
+    path("api/auth/mfa/verify/", MfaVerifyView.as_view(), name="mfa_verify"),
+    path("api/auth/mfa/enroll/start/", MfaEnrollStartView.as_view(), name="mfa_enroll_start"),
+    path("api/auth/mfa/enroll/confirm/", MfaEnrollConfirmView.as_view(), name="mfa_enroll_confirm"),
+    path("api/auth/mfa/enroll/postpone/", MfaEnrollPostponeView.as_view(), name="mfa_enroll_postpone"),
+    path("api/auth/mfa/status/", MfaStatusView.as_view(), name="mfa_status"),
+    path("api/auth/mfa/recovery-codes/regenerate/", MfaRegenerateRecoveryView.as_view(), name="mfa_recovery_regenerate"),
+    path("api/auth/mfa/trusted-devices/<uuid:device_id>/", MfaTrustedDeviceRevokeView.as_view(), name="mfa_trusted_device_revoke"),
+    path("api/admin/mfa/settings/", AdminMfaSettingsView.as_view(), name="admin_mfa_settings"),
+    path("api/admin/mfa/users/", AdminMfaUsersView.as_view(), name="admin_mfa_users"),
+    path("api/admin/mfa/reset/", AdminMfaResetView.as_view(), name="admin_mfa_reset"),
+    path("api/admin/mfa/reset-log/", AdminMfaResetLogView.as_view(), name="admin_mfa_reset_log"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/me/", me, name="me"),
     path("api/auth/me/update/", UpdateVetProfileView.as_view(), name="update_vet_profile"),

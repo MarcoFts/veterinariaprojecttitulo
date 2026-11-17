@@ -444,3 +444,13 @@ class Notificacion(models.Model):
 
     def __str__(self):
         return f"[{self.usuario_id}] {self.titulo} ({'leída' if self.leida else 'nueva'})"
+
+
+from .mfa_models import (  # noqa: E402, F401
+    MFAAuditLog,
+    MFAResetLog,
+    MFASettings,
+    RecoveryCode,
+    TrustedDevice,
+    UsuarioMFA,
+)

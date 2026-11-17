@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { setTokens, logout } from "../../auth";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import MfaFlowHandler from "../../components/mfa/MfaFlowHandler";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function AdminLogin() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null);
 
   const handleChange = (e) => {
     setForm((prev) => ({
@@ -19,59 +21,64 @@ export default function AdminLogin() {
     }));
   };
 
+  const finalizeLogin = async (data) => {
+    if (!data?.access) {
+      setError("No se recibió token. Revisa credenciales.");
+      return;
+    }
+
+    setTokens({ access: data.access, refresh: data.refresh });
+
+    const meRes = await api.get("/auth/me/");
+    const me = meRes.data;
+
+    const esAdmin = me?.is_admin === true || me?.is_staff === true || me?.is_superuser === true;
+
+    if (!esAdmin) {
+      logout();
+      setMfaChallenge(null);
+      setError("Esta cuenta no tiene permisos de administrador.");
+      return;
+    }
+
+    const userParaContexto = {
+      id: me.id,
+      email: me.email || form.email,
+      nombre:
+        me.name ||
+        `${me.first_name || ""} ${me.last_name || ""}`.trim(),
+      rol: "administrador",
+      is_admin: true,
+      is_staff: me.is_staff,
+    };
+
+    setAuthUser(userParaContexto, data.access);
+    navigate("/admin/home", { replace: true });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      // 1) Login
       const res = await api.post("/auth/login/", {
         email: form.email,
         password: form.password,
       });
 
       const data = res.data;
-      if (!data?.access) {
-        setError("No se recibió token. Revisa credenciales.");
+      if (
+        data?.status === "MFA_REQUIRED" ||
+        data?.status === "MFA_ENROLL_REQUIRED"
+      ) {
+        setMfaChallenge(data);
         setLoading(false);
         return;
       }
 
-      // 2) Guardar tokens
-      setTokens({ access: data.access, refresh: data.refresh });
-
-      // 3) Obtener perfil
-      const meRes = await api.get("/auth/me/");
-      const me = meRes.data;
-
-      const esAdmin = me?.is_admin === true || me?.is_staff === true || me?.is_superuser === true;
-
-      if (!esAdmin) {
-        logout();
-        setError("Esta cuenta no tiene permisos de administrador.");
-        setLoading(false);
-        return;
-      }
-
-      // 4) Guardar usuario en contexto
-      const userParaContexto = {
-        id: me.id,
-        email: me.email || form.email,
-        nombre:
-          me.name ||
-          `${me.first_name || ""} ${me.last_name || ""}`.trim(),
-        rol: "administrador",
-        is_admin: true,
-        is_staff: me.is_staff,
-      };
-
-      setAuthUser(userParaContexto, data.access);
-
-      // 5) Navegar al panel admin
-      navigate("/admin/home", { replace: true });
+      await finalizeLogin(data);
     } catch (err) {
-
       const msg =
         err?.response?.data?.detail ||
         err?.response?.data?.error ||
@@ -81,6 +88,16 @@ export default function AdminLogin() {
       setLoading(false);
     }
   };
+
+  if (mfaChallenge) {
+    return (
+      <MfaFlowHandler
+        challenge={mfaChallenge}
+        onAuthenticated={finalizeLogin}
+        onCancel={() => setMfaChallenge(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 flex items-center justify-center px-4 py-10">

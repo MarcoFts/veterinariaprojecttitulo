@@ -2,11 +2,13 @@
 import React from "react";
 import NavbarCliente from "./NavbarCliente";
 import NotificationBell from "../notifications/NotificationBell";
+import MfaGraceBanner from "../mfa/MfaGraceBanner";
 
 export default function LayoutCliente({ children }) {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 overflow-visible">
       <NavbarCliente />
+      <MfaGraceBanner profilePath="/cliente/perfil" />
 
       {/* Topbar suave (dentro de cliente) */}
       <div className="sticky top-0 z-30 bg-gradient-to-b from-slate-50/90 to-transparent backdrop-blur">

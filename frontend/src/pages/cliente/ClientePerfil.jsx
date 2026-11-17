@@ -5,6 +5,7 @@ import "dayjs/locale/es";
 dayjs.locale("es");
 
 import LayoutCliente from "../../components/layout/LayoutCliente";
+import MfaProfileSection from "../../components/mfa/MfaProfileSection";
 import {
   getClientePerfil,
   updateClientePerfil,
@@ -270,6 +271,10 @@ export default function ClientePerfil() {
             </button>
           </div>
         </form>
+
+        <div className="mt-6">
+          <MfaProfileSection />
+        </div>
       </div>
     </LayoutCliente>
   );
